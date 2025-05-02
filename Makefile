@@ -1,23 +1,13 @@
-GITVER := $(shell git rev-parse --short HEAD)
-VERSION = 0.0
-PREFIX ?= /usr/local
-SBINDIR ?= $(PREFIX)/sbin
+PREFIX ?= /usr
 
-SHIN    += $(wildcard *.sh.in)
-SCRIPTS += $(SHIN:.sh.in=.sh)
+all:
+	@echo RUN \'make install\' to install mpvctl
 
-%.sh: %.sh.in
-	sed -e "s|@@VERSION@@|$(VERSION) $(GITVER)|g" $^ > $@
-	chmod +x $@
+install:
+	@install -Dm755 mpvctl $(DESTDIR)$(PREFIX)/bin/mpvctl
+	@install -Dm755 mpvd $(DESTDIR)$(PREFIX)/bin/mpvd
 
-all: $(SCRIPTS)
+uninstall:
+	@rm -f $(DESTDIR)$(PREFIX)/bin/mpvctl
+	@rm -f $(DESTDIR)$(PREFIX)/bin/mpvd
 
-install: all
-	install -d $(DESTDIR)$(SBINDIR)
-	install -m755 mpvctl.sh $(DESTDIR)$(SBINDIR)/mpvctl
-	install -m755 mpvd.sh $(DESTDIR)$(SBINDIR)/mpvd
-
-clean:
-	-rm -f *.sh
-
-.PHONY: all clean install dist

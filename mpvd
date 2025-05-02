@@ -1,0 +1,3 @@
+#!/bin/sh
+
+setsid -f mpv --cache=yes --cache-secs=30 --demuxer-max-bytes=256MiB --demuxer-readahead-secs=20 --idle=yes --input-ipc-server="$XDG_RUNTIME_DIR"/mpvd > /dev/null 2>&1

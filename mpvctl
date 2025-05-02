@@ -1,0 +1,136 @@
+#!/bin/sh
+
+err() {
+    printf "Error: %s\n" "$@"
+    exit 1
+}
+
+usage() {
+    cat << EOFUSAGE
+$PROGNAME <cmd> [ARGS...]
+
+COMMANDS:
+  play		- start playing
+  pause		- pause current file
+  toggle	- toggle current file
+  stop		- stop and clear playlist
+  next		- play next file
+  prev		- play previous file
+  ls		- list the playlist
+  clear		- clear the playlist
+  shuffle	- shuffle the playlist
+  prop [...]	- get properties
+  add [...]	- add parameters to playlist
+  replace [...]	- replace playlist with parameters
+
+PIPE:
+  find ~/music/ -type f | $PROGNAME
+  find ~/music/ -type f | $PROGNAME replace
+EOFUSAGE
+}
+
+cmd() {
+    cmd="$1"
+    args=""
+    idx=0
+    shift
+    for a in "$@"; do
+        [ $((idx = idx + 1)) -le "$#" ] && args="$args, "
+        case "${a}" in
+            true | false | [0-9]*) args="${args}${a}" ;;
+            *) args="${args}\"${a}\"" ;;
+        esac
+    done
+    printf '{ "command": ["%s"%s] }\n' "$cmd" "$args" | $UNIX_SOCK_CMD
+}
+
+append() {
+    opt="$1"
+    [ -n "$opt" ] && shift
+    if [ -t 0 ]; then
+        for f in "$@"; do
+            cmd "loadfile" "${f}" "$opt" > /dev/null
+        done
+    else
+        while read f; do
+            cmd "loadfile" "${f}" "$opt" > /dev/null
+        done
+    fi
+}
+
+list() {
+    current_file="$(cmd "get_property" "filename" | "${JQ_CMD}" -r .data)"
+    paused="$(cmd "get_property" "pause" | "${JQ_CMD}" -r .data)"
+    index=1
+    cmd "get_property" "playlist" | "${JQ_CMD}" .data[].filename | while read var; do
+        filebasename="$(basename "$var" | sed 's/\"//g')"
+        if [ "$current_file" = "$filebasename" ]; then
+            echo "\033[1m[$index] $filebasename [*]\033[0m"
+        else
+            echo "[$index] $filebasename"
+        fi
+        index=$((index + 1))
+    done
+
+    if [ "$paused" = "true" ]; then
+        echo "state: paused"
+    else
+        echo "state: playing"
+    fi
+}
+
+toggle() {
+    paused="$(cmd "get_property" "pause" | "${JQ_CMD}" -r .data)"
+    if [ "$paused" = "true" ]; then
+        cmd "set_property" "pause" "false"
+    else
+        cmd "set_property" "pause" "true"
+    fi
+}
+
+cli() {
+    cmd="$1"
+    [ -n "$cmd" ] && shift
+    case "$cmd" in
+        prop) for p; do cmd "get_property" "$p"; done ;;
+        pause) cmd "set_property" "pause" "true" > /dev/null ;;
+        play) cmd "set_property" "pause" "false" > /dev/null ;;
+        toggle) toggle > /dev/null ;;
+        stop) cmd "stop" > /dev/null ;;
+        next) cmd "playlist-next" > /dev/null ;;
+        prev) cmd "playlist-prev" > /dev/null ;;
+        add | append) append "append-play" "$@" ;;
+        rep | replace) append "replace" "$@" ;;
+        ls | list | status) list "$@" ;;
+        clear) cmd "playlist-clear" > /dev/null ;;
+        shuffle) cmd "playlist-shuffle" > /dev/null ;;
+        *) usage && exit 1 ;;
+    esac
+}
+
+: ${PROGNAME:="$0"}
+: ${UNIX_SOCK_PATH:="$XDG_RUNTIME_DIR/mpvd"}
+
+: ${JQ_CMD:=$(command -v jq)}
+[ -z "$JQ_CMD" ] && err "could not find jq"
+
+if [ -z "$UNIX_SOCK_CMD" ]; then
+    if [ $(command -v socat) ]; then
+        UNIX_SOCK_CMD="socat - ${UNIX_SOCK_PATH}"
+    else
+        err "could not find socat"
+    fi
+fi
+
+if [ -t 0 ]; then
+    cli "$@"
+else
+    case "${opt:=$1}" in
+        append* | replace)
+            shift
+            append "$opt"
+            ;;
+        *) append "append-play" ;;
+    esac
+fi
+exit 0
