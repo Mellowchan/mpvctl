@@ -11,6 +11,10 @@ make install
 ## Usage
 
 ```
+mpvd start|stop|restart|status|log
+```
+
+```
 mpvctl <cmd> [ARGS...]
 
 COMMANDS:
