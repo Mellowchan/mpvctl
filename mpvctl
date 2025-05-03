@@ -94,7 +94,7 @@ list() {
     else
         status="playing"
     fi
-    echo "\nstate: $status, time: ${playback_h}:${playback_m}:${playback_s}/${duration_h}:${duration_m}:${duration_s}, file: ${current_file%.*}"
+    echo -e "\nstate: $status, time: ${playback_h}:${playback_m}:${playback_s}/${duration_h}:${duration_m}:${duration_s}, file: ${current_file%.*}"
 }
 
 toggle() {
