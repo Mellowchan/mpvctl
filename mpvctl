@@ -49,11 +49,13 @@ append() {
     [ -n "$opt" ] && shift
     if [ -t 0 ]; then
         for f in "$@"; do
-            cmd "loadfile" "${f}" "$opt" > /dev/null
+            fullpath="$(realpath ${f})"
+            cmd "loadfile" "${fullpath}" "$opt" > /dev/null
         done
     else
         while read f; do
-            cmd "loadfile" "${f}" "$opt" > /dev/null
+            fullpath="$(realpath ${f})"
+            cmd "loadfile" "${fullpath}" "$opt" > /dev/null
         done
     fi
 }
@@ -65,7 +67,7 @@ list() {
     cmd "get_property" "playlist" | "${JQ_CMD}" .data[].filename | while read var; do
         filebasename="$(basename "$var" | sed 's/\"//g')"
         if [ "$current_file" = "$filebasename" ]; then
-            echo "\033[1m[$index] $filebasename [*]\033[0m"
+            echo "[$index] $filebasename [*]"
         else
             echo "[$index] $filebasename"
         fi
@@ -73,9 +75,9 @@ list() {
     done
 
     if [ "$paused" = "true" ]; then
-        echo "state: paused"
+        echo 'state: paused'
     else
-        echo "state: playing"
+        echo 'state: playing'
     fi
 }
 
@@ -101,7 +103,7 @@ cli() {
         prev) cmd "playlist-prev" > /dev/null ;;
         add | append) append "append-play" "$@" ;;
         rep | replace) append "replace" "$@" ;;
-        ls | list | status) list "$@" ;;
+        ls | list) list "$@" ;;
         clear) cmd "playlist-clear" > /dev/null ;;
         shuffle) cmd "playlist-shuffle" > /dev/null ;;
         *) usage && exit 1 ;;

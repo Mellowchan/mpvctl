@@ -1,3 +1,43 @@
 #!/bin/sh
 
-setsid -f mpv --cache=yes --cache-secs=30 --demuxer-max-bytes=256MiB --demuxer-readahead-secs=20 --idle=yes --input-ipc-server="$XDG_RUNTIME_DIR"/mpvd > /dev/null 2>&1
+MPVD_PID="$(ps aux | grep -m 1 "input-ipc-server=$XDG_RUNTIME_DIR/mpvd" | awk '{print $2}')"
+
+status() {
+    if [ -n "$MPVD_PID" ]; then
+        echo "mpvd is running ($MPVD_PID)"
+    else
+        echo 'mpvd is down'
+    fi
+}
+
+log() {
+    cat /tmp/mpvd.log
+}
+
+start() {
+    if [ -z "$MPVD_PID" ]; then
+        setsid -f mpv --cache=yes --cache-secs=30 --demuxer-max-bytes=256MiB --demuxer-readahead-secs=20 --idle=yes --input-ipc-server="$XDG_RUNTIME_DIR"/mpvd > /tmp/mpvd.log 2>&1
+    fi
+}
+
+stop() {
+    if [ -n "$MPVD_PID" ]; then
+        kill -9 "$MPVD_PID"
+    fi
+}
+
+restart() {
+    stop
+    sleep 0.1
+    start
+}
+
+case "$1" in
+    start) start ;;
+    stop) stop ;;
+    restart) restart ;;
+    status) status ;;
+    log) log ;;
+    *) echo 'Usage: mpvd start|stop|restart|status|log' ;;
+esac
+exit 0
