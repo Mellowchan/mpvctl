@@ -1,6 +1,5 @@
 #!/bin/sh
-
-MPVD_PID="$(ps aux | grep -m 1 "input-ipc-server=$XDG_RUNTIME_DIR/mpvd" | awk '{print $2}')"
+MPVD_PID="$(ps aux | grep -m 1 "input-ipc-server=$XDG_RUNTIME_DIR/mpvd" | grep -v grep | awk '{print $2}')"
 
 status() {
     if [ -n "$MPVD_PID" ]; then
@@ -28,7 +27,7 @@ stop() {
 
 restart() {
     stop
-    sleep 0.1
+    MPVD_PID=""
     start
 }
 

@@ -61,24 +61,40 @@ append() {
 }
 
 list() {
+    bold=$(tput bold)
+    normal=$(tput sgr0)
     current_file="$(cmd "get_property" "filename" | "${JQ_CMD}" -r .data)"
-    paused="$(cmd "get_property" "pause" | "${JQ_CMD}" -r .data)"
     index=1
+
+    echo 'Playlist:'
     cmd "get_property" "playlist" | "${JQ_CMD}" .data[].filename | while read var; do
         filebasename="$(basename "$var" | sed 's/\"//g')"
         if [ "$current_file" = "$filebasename" ]; then
-            echo "[$index] $filebasename [*]"
+            echo "${bold}[$index] ${filebasename%.*} [*]${normal}"
         else
             echo "[$index] $filebasename"
         fi
         index=$((index + 1))
     done
 
+    paused="$(cmd "get_property" "pause" | "${JQ_CMD}" -r .data)"
+    playback_secs="$(cmd "get_property" "playback-time" | "${JQ_CMD}" -r .data | awk -F '.' '{print $1}')"
+    duration_secs="$(cmd "get_property" "duration" | "${JQ_CMD}" -r .data | awk -F '.' '{print $1}')"
+
+    playback_h=$((playback_secs / 3600))
+    playback_m=$((playback_secs % 3600 / 60))
+    playback_s=$((playback_secs % 60))
+
+    duration_h=$((duration_secs / 3600))
+    duration_m=$((duration_secs % 3600 / 60))
+    duration_s=$((duration_secs % 60))
+
     if [ "$paused" = "true" ]; then
-        echo 'state: paused'
+        status="paused"
     else
-        echo 'state: playing'
+        status="playing"
     fi
+    echo "\nstate: $status, time: ${playback_h}:${playback_m}:${playback_s}/${duration_h}:${duration_m}:${duration_s}, file: ${current_file%.*}"
 }
 
 toggle() {
