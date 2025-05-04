@@ -13,7 +13,6 @@ COMMANDS:
   play		- start playing
   pause		- pause current file
   toggle	- toggle current file
-  stop		- stop and clear playlist
   next		- play next file
   prev		- play previous file
   ls		- list the playlist
@@ -49,13 +48,13 @@ append() {
     [ -n "$opt" ] && shift
     if [ -t 0 ]; then
         for f in "$@"; do
-            fullpath="$(realpath ${f})"
-            cmd "loadfile" "${fullpath}" "$opt" > /dev/null
+            fullpath="$(realpath "$f")"
+            cmd "loadfile" "$fullpath" "$opt" > /dev/null
         done
     else
         while read f; do
-            fullpath="$(realpath ${f})"
-            cmd "loadfile" "${fullpath}" "$opt" > /dev/null
+            fullpath="$(realpath "$f")"
+            cmd "loadfile" "$fullpath" "$opt" > /dev/null
         done
     fi
 }
@@ -72,7 +71,7 @@ list() {
         if [ "$current_file" = "$filebasename" ]; then
             echo "${bold}[$index] ${filebasename%.*} [*]${normal}"
         else
-            echo "[$index] $filebasename"
+            echo "[$index] ${filebasename%.*}"
         fi
         index=$((index + 1))
     done
@@ -89,7 +88,7 @@ list() {
     duration_m=$((duration_secs % 3600 / 60))
     duration_s=$((duration_secs % 60))
 
-    if [ "$paused" = "true" ]; then
+    if [ "$paused" = "true" ] || [ "$index" = 1 ]; then
         status="paused"
     else
         status="playing"
@@ -114,13 +113,12 @@ cli() {
         pause) cmd "set_property" "pause" "true" > /dev/null ;;
         play) cmd "set_property" "pause" "false" > /dev/null ;;
         toggle) toggle > /dev/null ;;
-        stop) cmd "stop" > /dev/null ;;
+        clear) cmd "stop" > /dev/null ;;
         next) cmd "playlist-next" > /dev/null ;;
         prev) cmd "playlist-prev" > /dev/null ;;
         add | append) append "append-play" "$@" ;;
         rep | replace) append "replace" "$@" ;;
         ls | list) list "$@" ;;
-        clear) cmd "playlist-clear" > /dev/null ;;
         shuffle) cmd "playlist-shuffle" > /dev/null ;;
         *) usage && exit 1 ;;
     esac

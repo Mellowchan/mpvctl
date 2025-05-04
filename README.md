@@ -21,7 +21,6 @@ COMMANDS:
   play		- start playing
   pause		- pause current file
   toggle	- toggle current file
-  stop		- stop and clear playlist
   next		- play next file
   prev		- play previous file
   ls		- list the playlist
