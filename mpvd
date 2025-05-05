@@ -15,7 +15,15 @@ log() {
 
 start() {
     if [ -z "$MPVD_PID" ]; then
-        setsid -f mpv --loop-playlist --cache=yes --cache-secs=30 --demuxer-max-bytes=256MiB --demuxer-readahead-secs=20 --idle=yes --input-ipc-server="$XDG_RUNTIME_DIR"/mpvd > /tmp/mpvd.log 2>&1
+        setsid -f mpv \
+            --loop-playlist \
+            --cache=yes \
+            --cache-secs=30 \
+            --demuxer-max-bytes=256MiB \
+            --demuxer-readahead-secs=20 \
+            --no-video \
+            --idle=yes \
+            --input-ipc-server="$XDG_RUNTIME_DIR"/mpvd > /tmp/mpvd.log 2>&1
     fi
 }
 
