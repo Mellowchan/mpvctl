@@ -18,9 +18,9 @@ start() {
         setsid -f mpv \
             --loop-playlist \
             --cache=yes \
-            --cache-secs=30 \
+            --cache-secs=60 \
             --demuxer-max-bytes=256MiB \
-            --demuxer-readahead-secs=20 \
+            --demuxer-readahead-secs=30 \
             --no-video \
             --idle=yes \
             --input-ipc-server="$XDG_RUNTIME_DIR"/mpvd > /tmp/mpvd.log 2>&1
