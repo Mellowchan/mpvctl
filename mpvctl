@@ -63,6 +63,7 @@ list() {
     bold=$(tput bold)
     normal=$(tput sgr0)
     current_file="$(cmd "get_property" "filename" | "${JQ_CMD}" -r .data)"
+    files_count="$(cmd "get_property" "playlist" | "${JQ_CMD}" .data[].filename | wc -l)"
     index=1
 
     echo 'Playlist:'
@@ -88,7 +89,7 @@ list() {
     duration_m=$((duration_secs % 3600 / 60))
     duration_s=$((duration_secs % 60))
 
-    if [ "$paused" = "true" ] || [ "$index" = 1 ]; then
+    if [ "$paused" = "true" ] || [ "$files_count" -lt 1 ]; then
         status="paused"
     else
         status="playing"
