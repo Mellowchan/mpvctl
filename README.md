@@ -28,7 +28,6 @@ COMMANDS:
   shuffle	- shuffle the playlist
   prop [...]	- get properties
   add [...]	- add parameters to playlist
-  replace [...]	- replace playlist with parameters
 
 PIPE:
   find ~/music/ -type f | $PROGNAME
