@@ -1,5 +1,7 @@
 #!/bin/sh
 
+playlist_file="$HOME"/.local/share/mpvd_playlist.m3u
+
 err() {
     printf "Error: %s\n" "$@"
     exit 1
@@ -20,11 +22,9 @@ COMMANDS:
   shuffle	- shuffle the playlist
   prop [...]	- get properties
   add [...]	- add parameters to playlist
-  replace [...]	- replace playlist with parameters
 
 PIPE:
   find ~/music/ -type f | $PROGNAME
-  find ~/music/ -type f | $PROGNAME replace
 EOFUSAGE
 }
 
@@ -50,11 +50,13 @@ append() {
         for f in "$@"; do
             fullpath="$(realpath "$f")"
             cmd "loadfile" "$fullpath" "$opt" > /dev/null
+            echo "$fullpath" >> "$playlist_file"
         done
     else
         while read f; do
             fullpath="$(realpath "$f")"
             cmd "loadfile" "$fullpath" "$opt" > /dev/null
+            echo "$fullpath" >> "$playlist_file"
         done
     fi
 }
@@ -114,11 +116,10 @@ cli() {
         pause) cmd "set_property" "pause" "true" > /dev/null ;;
         play) cmd "set_property" "pause" "false" > /dev/null ;;
         toggle) toggle > /dev/null ;;
-        clear) cmd "stop" > /dev/null ;;
+        clear) truncate -s 0 "$playlist_file" && cmd "stop" > /dev/null ;;
         next) cmd "playlist-next" > /dev/null ;;
         prev) cmd "playlist-prev" > /dev/null ;;
         add | append) append "append-play" "$@" ;;
-        rep | replace) append "replace" "$@" ;;
         ls | list) list "$@" ;;
         shuffle) cmd "playlist-shuffle" > /dev/null ;;
         *) usage && exit 1 ;;
@@ -143,7 +144,7 @@ if [ -t 0 ]; then
     cli "$@"
 else
     case "${opt:=$1}" in
-        append* | replace)
+        append*)
             shift
             append "$opt"
             ;;
