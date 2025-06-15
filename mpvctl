@@ -61,7 +61,17 @@ append() {
     fi
 }
 
+recheck_mpvd() {
+    mpv_status="$(mpvd status | awk '{print $3}')"
+
+    if [ "$mpv_status" = "down" ]; then
+        mpvd start
+    fi
+}
+
 list() {
+    recheck_mpvd
+
     bold=$(tput bold)
     normal=$(tput sgr0)
     current_file="$(cmd "get_property" "filename" | "${JQ_CMD}" -r .data)"
@@ -99,7 +109,21 @@ list() {
     echo -e "\nstate: $status, time: ${playback_h}:${playback_m}:${playback_s}/${duration_h}:${duration_m}:${duration_s}, file: ${current_file%.*}"
 }
 
+mpv_play() {
+    recheck_mpvd
+
+    cmd "set_property" "pause" "false"
+}
+
+mpv_pause() {
+    recheck_mpvd
+
+    cmd "set_property" "pause" "true"
+}
+
 toggle() {
+    recheck_mpvd
+
     paused="$(cmd "get_property" "pause" | "${JQ_CMD}" -r .data)"
     if [ "$paused" = "true" ]; then
         cmd "set_property" "pause" "false"
@@ -113,8 +137,8 @@ cli() {
     [ -n "$cmd" ] && shift
     case "$cmd" in
         prop) for p; do cmd "get_property" "$p"; done ;;
-        pause) cmd "set_property" "pause" "true" > /dev/null ;;
-        play) cmd "set_property" "pause" "false" > /dev/null ;;
+        play) mpv_play > /dev/null ;;
+        pause) mpv_pause > /dev/null ;;
         toggle) toggle > /dev/null ;;
         clear) truncate -s 0 "$playlist_file" && cmd "stop" > /dev/null ;;
         next) cmd "playlist-next" > /dev/null ;;

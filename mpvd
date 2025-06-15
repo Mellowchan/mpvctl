@@ -15,7 +15,7 @@ log() {
 
 start() {
     playlist_file="$HOME"/.local/share/mpvd_playlist.m3u
-    touch "$playlist_file"
+    test -e "$playlist_file" || touch "$playlist_file"
 
     if [ -z "$MPVD_PID" ]; then
         setsid -f mpv \
