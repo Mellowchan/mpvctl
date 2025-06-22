@@ -28,9 +28,10 @@ COMMANDS:
   shuffle	- shuffle the playlist
   prop [...]	- get properties
   add [...]	- add parameters to playlist
+  jump [i]	- jump to index in playlist
+  del [i] [i]	- delete item or range
 
 PIPE:
   find ~/music/ -type f | $PROGNAME
-  find ~/music/ -type f | $PROGNAME replace
 
 ```
