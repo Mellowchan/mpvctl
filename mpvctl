@@ -28,6 +28,14 @@ PIPE:
 EOFUSAGE
 }
 
+recheck_mpvd() {
+    mpv_status="$(mpvd status | awk '{print $3}')"
+
+    if [ "$mpv_status" = "down" ]; then
+        mpvd start
+    fi
+}
+
 cmd() {
     cmd="$1"
     args=""
@@ -61,14 +69,6 @@ append() {
     fi
 }
 
-recheck_mpvd() {
-    mpv_status="$(mpvd status | awk '{print $3}')"
-
-    if [ "$mpv_status" = "down" ]; then
-        mpvd start
-    fi
-}
-
 list() {
     recheck_mpvd
 
@@ -76,7 +76,7 @@ list() {
     normal=$(tput sgr0)
     current_file="$(cmd "get_property" "filename" | "${JQ_CMD}" -r .data)"
     files_count="$(cmd "get_property" "playlist" | "${JQ_CMD}" .data[].filename | wc -l)"
-    index=1
+    index=0
 
     echo 'Playlist:'
     cmd "get_property" "playlist" | "${JQ_CMD}" .data[].filename | while read var; do
@@ -110,20 +110,14 @@ list() {
 }
 
 mpv_play() {
-    recheck_mpvd
-
     cmd "set_property" "pause" "false"
 }
 
 mpv_pause() {
-    recheck_mpvd
-
     cmd "set_property" "pause" "true"
 }
 
 toggle() {
-    recheck_mpvd
-
     paused="$(cmd "get_property" "pause" | "${JQ_CMD}" -r .data)"
     if [ "$paused" = "true" ]; then
         cmd "set_property" "pause" "false"
@@ -140,12 +134,22 @@ cli() {
         play) mpv_play > /dev/null ;;
         pause) mpv_pause > /dev/null ;;
         toggle) toggle > /dev/null ;;
-        clear) truncate -s 0 "$playlist_file" && cmd "stop" > /dev/null ;;
+        clear) cmd "stop" && truncate -s 0 "$playlist_file" > /dev/null ;;
         next) cmd "playlist-next" > /dev/null ;;
         prev) cmd "playlist-prev" > /dev/null ;;
+        jump) cmd "set_property" "playlist-pos" "$1" > /dev/null ;;
         add | append) append "append-play" "$@" ;;
-        ls | list) list "$@" ;;
+        del | delete)
+            if [ -n "$2" ]; then
+                for j in $(seq "$1" "$2"); do
+                    cmd "playlist-remove" "$j" > /dev/null
+                done
+            else
+                cmd "playlist-remove" "$1" > /dev/null
+            fi
+            ;;
         shuffle) cmd "playlist-shuffle" > /dev/null ;;
+        ls | list) list "$@" ;;
         *) usage && exit 1 ;;
     esac
 }
@@ -163,6 +167,8 @@ if [ -z "$UNIX_SOCK_CMD" ]; then
         err "could not find socat"
     fi
 fi
+
+recheck_mpvd
 
 if [ -t 0 ]; then
     cli "$@"
