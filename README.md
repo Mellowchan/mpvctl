@@ -18,18 +18,23 @@ mpvd start|stop|restart|status|log
 mpvctl <cmd> [ARGS...]
 
 COMMANDS:
-  play		- start playing
-  pause		- pause current file
-  toggle	- toggle current file
-  next		- play next file
-  prev		- play previous file
-  ls		- list the playlist
-  clear		- clear the playlist
-  shuffle	- shuffle the playlist
-  prop [...]	- get properties
-  add [...]	- add parameters to playlist
-  jump [i]	- jump to index in playlist
-  del [i] [i]	- delete item or range
+  p | play		    - start playing
+  s | pause		    - pause current file
+  T | toggle	    - toggle current file
+  N | next		    - play next file
+  P | prev		    - play previous file
+  l | ls		    - list the playlist
+  c | clear		    - clear the playlist
+  S | shuffle		- shuffle the playlist
+  j | jump [i]		- jump to index in playlist
+  e | seek [i]		- seek in seconds
+  t | time [i]		- jump to time in seconds
+  O | prop [...]	- get property
+  C | cmd [...]		- send custom command
+  a | add [...]		- add parameters to playlist
+  d | del [i] [i]	- delete item or range
+  L | log		    - list the mpvd logs
+  R | restart		- restart mpvd
 
 PIPE:
   find ~/music/ -type f | $PROGNAME
