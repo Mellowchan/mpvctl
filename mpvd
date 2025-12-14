@@ -26,8 +26,6 @@ start() {
 			--demuxer-readahead-secs=30 \
 			--no-video \
 			--idle=yes \
-			--keep-open=always \
-			--pause=yes \
 			--playlist="$playlist_file" \
 			--input-ipc-server="$XDG_RUNTIME_DIR"/mpvd >/tmp/mpvd.log 2>&1
 	fi
