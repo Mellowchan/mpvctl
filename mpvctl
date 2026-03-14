@@ -29,6 +29,7 @@ COMMANDS:
   d | del [i] [i]	- delete item or range
   L | log		- list the mpvd logs
   R | restart		- restart mpvd
+  h | help		- print usage
 
 PIPE:
   find ~/music/ -type f | $PROGNAME
@@ -139,6 +140,7 @@ toggle() {
 
 cli() {
 	cmd="$1"
+	[ -z "$cmd" ] && list && exit 0
 	[ -n "$cmd" ] && shift
 	case "$cmd" in
 	O | prop) cmd "get_property" "$@" ;;
@@ -163,7 +165,7 @@ cli() {
 		fi
 		;;
 	S | shuffle) cmd "playlist-shuffle" >/dev/null ;;
-	l | ls) list "$@" ;;
+	l | ls) list ;;
 	L | log) mpvd log ;;
 	R | restart) mpvd restart ;;
 	*) usage && exit 1 ;;
