@@ -57,7 +57,6 @@ cmd() {
 		*) args="${args}\"${a}\"" ;;
 		esac
 	done
-	printf '{ "command": ["%s"%s] }\n' "$cmd" "$args"
 	printf '{ "command": ["%s"%s] }\n' "$cmd" "$args" | $UNIX_SOCK_CMD
 }
 
