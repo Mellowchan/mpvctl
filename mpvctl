@@ -57,6 +57,7 @@ cmd() {
 		*) args="${args}\"${a}\"" ;;
 		esac
 	done
+	printf '{ "command": ["%s"%s] }\n' "$cmd" "$args"
 	printf '{ "command": ["%s"%s] }\n' "$cmd" "$args" | $UNIX_SOCK_CMD
 }
 
@@ -76,6 +77,18 @@ append() {
 			echo "$fullpath" >>"$playlist_file"
 		done
 	fi
+}
+
+delete() {
+	if [ -n "$2" ]; then
+		runs=$(($2 - $1))
+		for _ in $(seq "0" "$runs"); do
+			cmd "playlist-remove" "$1" >/dev/null
+		done
+	else
+		cmd "playlist-remove" "$1" >/dev/null
+	fi
+
 }
 
 list() {
@@ -155,15 +168,7 @@ cli() {
 	t | time) cmd "set_property" "time-pos" "$1" >/dev/null ;;
 	e | seek) cmd "add" "time-pos" "$1" >/dev/null ;;
 	a | add) append "append-play" "$@" ;;
-	d | del)
-		if [ -n "$2" ]; then
-			for j in $(seq "$1" "$2"); do
-				cmd "playlist-remove" "$j" >/dev/null
-			done
-		else
-			cmd "playlist-remove" "$1" >/dev/null
-		fi
-		;;
+	d | del | delete) delete "$@" ;;
 	S | shuffle) cmd "playlist-shuffle" >/dev/null ;;
 	l | ls) list ;;
 	L | log) mpvd log ;;
