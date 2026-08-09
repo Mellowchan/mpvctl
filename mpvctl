@@ -88,6 +88,7 @@ delete() {
 		cmd "playlist-remove" "$1" >/dev/null
 	fi
 
+	cmd "get_property" "playlist" | "${JQ_CMD}" -r .data[].filename >"$playlist_file"
 }
 
 list() {
