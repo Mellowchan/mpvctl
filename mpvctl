@@ -153,42 +153,31 @@ load() {
 list() {
     bold=$(tput bold)
     normal=$(tput sgr0)
-    current_file="$(cmd "get_property" "filename" | "${JQ_CMD}" -r .data)"
-    files_count="$(cmd "get_property" "playlist" | "${JQ_CMD}" .data[].filename | wc -l)"
-    index=0
 
-    printf 'Playlist:\n'
-    cmd "get_property" "playlist" | "${JQ_CMD}" .data[].filename | while read -r var; do
-        filebasename="$(basename "$var" | sed 's/\"//g')"
-        if [ "$current_file" = "$filebasename" ]; then
-            printf "${bold}[%s] %s [*]${normal}\n" "$index" "${filebasename%.*}"
-        else
-            printf "[%s] %s\n" "$index" "${filebasename%.*}"
-        fi
-        index=$((index + 1))
-    done
-
-    paused="$(cmd "get_property" "pause" | "${JQ_CMD}" -r .data)"
-    playback_secs="$(cmd "get_property" "playback-time" | "${JQ_CMD}" -r .data | awk -F '.' '{print $1}')"
-    duration_secs="$(cmd "get_property" "duration" | "${JQ_CMD}" -r .data | awk -F '.' '{print $1}')"
-
-    playback_h=$((playback_secs / 3600))
-    playback_m=$((playback_secs % 3600 / 60))
-    playback_s=$((playback_secs % 60))
-
-    duration_h=$((duration_secs / 3600))
-    duration_m=$((duration_secs % 3600 / 60))
-    duration_s=$((duration_secs % 60))
-
-    if [ "$paused" = "true" ] || [ "$files_count" -lt 1 ]; then
-        status="paused"
-    else
-        status="playing"
-    fi
-
-    printf "\nstatus: %s, time: %s:%s:%s/%s:%s:%s, file: %s" \
-        "$status" "${playback_h}" "${playback_m}" "${playback_s}" \
-        "${duration_h}" "${duration_m}" "${duration_s}" "${current_file%.*}"
+    # one socket round-trip for everything, one jq pass for all formatting
+    {
+        printf '{ "request_id": 1, "command": ["get_property", "playlist"] }\n'
+        printf '{ "request_id": 2, "command": ["get_property", "pause"] }\n'
+        printf '{ "request_id": 3, "command": ["get_property", "playback-time"] }\n'
+        printf '{ "request_id": 4, "command": ["get_property", "duration"] }\n'
+    } | $UNIX_SOCK_CMD | "${JQ_CMD}" -r -s --arg bold "$bold" --arg normal "$normal" '
+        reduce .[] as $r ({};
+            if   $r.request_id == 1 then .playlist = $r.data
+            elif $r.request_id == 2 then .paused   = $r.data
+            elif $r.request_id == 3 then .playback = $r.data
+            elif $r.request_id == 4 then .duration = $r.data
+            else . end
+        ) as $s
+        | "Playlist:",
+          ($s.playlist | to_entries[] |
+             ((.value.filename | split("/") | last | sub("\\.[^.]*$"; "")) as $name
+              | if .value.current
+                then "\($bold)[\(.key)] \($name) [*]\($normal)"
+                else "[\(.key)] \($name)"
+                end)),
+          (($s.playback // 0 | floor) as $pb
+           | ($s.duration // 0 | floor) as $du
+           | "\nstatus: \(if $s.paused or (($s.playlist | length) == 0) then "paused" else "playing" end), time: \($pb/3600|floor):\(($pb%3600)/60|floor):\($pb%60)/\($du/3600|floor):\(($du%3600)/60|floor):\($du%60), file: \(if (($s.playlist | length) > 0) then ((($s.playlist | map(select(.current)) | .[0].filename) // "") | split("/") | last | sub("\\.[^.]*$"; "")) else "" end)")'
 }
 
 toggle() {
