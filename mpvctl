@@ -30,7 +30,7 @@ COMMANDS:
   stop			- stop mpv server
   restart		- restart mpv server
   status		- print mpv server status
-  L | log		- list the mpv server log
+  log			- list the mpv server log
   h | help		- print usage
 
 PIPE:
@@ -233,7 +233,7 @@ cmd="$1"
 case "$cmd" in
     O | prop | C | cmd | p | play | s | pause | T | toggle | c | clear | \
         N | next | P | prev | j | jump | t | time | e | seek | a | add | \
-        d | del | delete | S | shuffle | l | ls | save | load | L | log)
+        d | del | delete | S | shuffle | l | ls | save | load | log)
         recheck_mpvd
         ;;
 esac
@@ -259,9 +259,9 @@ case "$cmd" in
     load) load "$@" ;;
     start) start ;;
     stop) stop ;;
-    R | restart) restart ;;
+    restart) restart ;;
     status) status ;;
-    L | log) log ;;
+    log) log ;;
     *) usage && exit 1 ;;
 esac
 
