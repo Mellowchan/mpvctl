@@ -24,10 +24,10 @@ COMMANDS:
   C | cmd [...]		- send custom command
   a | add [...]		- add parameters to playlist
   d | del [i] [i]	- delete item or range
-  save [file]			- save current playlist to file
-  load [file]			- load playlit from file
-  start				- start mpv server
-  stop				- stop mpv server
+  save [file]		- save current playlist to file
+  load [file]		- load playlit from file
+  start			- start mpv server
+  stop			- stop mpv server
   restart		- restart mpv server
   status		- print mpv server status
   L | log		- list the mpv server log
@@ -92,7 +92,10 @@ recheck_mpvd() {
         echo 'mpv server is down'
         start
         echo 'starting mpv server ...'
-        sleep 1
+        while [ -z "$MPVD_PID" ]; do
+            sleep 0.1
+            MPVD_PID="$(pgrep -f "input-ipc-server=$XDG_RUNTIME_DIR/mpvd")"
+        done
     fi
 }
 
@@ -142,6 +145,11 @@ delete() {
     cmd "get_property" "playlist" | "${JQ_CMD}" -r .data[].filename > "$PLAYLIST_FILE"
 }
 
+shuffle() {
+    cmd "playlist-shuffle" > /dev/null
+    cmd "get_property" "playlist" | "${JQ_CMD}" -r .data[].filename > "$PLAYLIST_FILE"
+}
+
 save() {
     cmd "get_property" "playlist" | "${JQ_CMD}" -r .data[].filename > "$1"
 }
@@ -155,6 +163,7 @@ list() {
     normal=$(tput sgr0)
 
     # one socket round-trip for everything, one jq pass for all formatting
+    # shellcheck disable=SC2016 # jq vars ($r, $s, ...), not shell expansions
     {
         printf '{ "request_id": 1, "command": ["get_property", "playlist"] }\n'
         printf '{ "request_id": 2, "command": ["get_property", "pause"] }\n'
@@ -177,7 +186,19 @@ list() {
                 end)),
           (($s.playback // 0 | floor) as $pb
            | ($s.duration // 0 | floor) as $du
-           | "\nstatus: \(if $s.paused or (($s.playlist | length) == 0) then "paused" else "playing" end), time: \($pb/3600|floor):\(($pb%3600)/60|floor):\($pb%60)/\($du/3600|floor):\(($du%3600)/60|floor):\($du%60), file: \(if (($s.playlist | length) > 0) then ((($s.playlist | map(select(.current)) | .[0].filename) // "") | split("/") | last | sub("\\.[^.]*$"; "")) else "" end)")'
+           | "\nstatus: " +
+             (if $s.paused or (($s.playlist | length) == 0)
+              then "paused"
+              else "playing"
+              end) +
+             ", time: " +
+             "\($pb/3600|floor):\(($pb%3600)/60|floor):\($pb%60)/" +
+             "\($du/3600|floor):\(($du%3600)/60|floor):\($du%60), file: " +
+             (if (($s.playlist | length) > 0)
+              then (($s.playlist | map(select(.current)) | .[0].filename) // "")
+                   | split("/") | last | sub("\\.[^.]*$"; "")
+              else ""
+              end))'
 }
 
 toggle() {
@@ -222,17 +243,17 @@ case "$cmd" in
     O | prop) cmd "get_property" "$@" ;;
     C | cmd) cmd "$@" ;;
     p | play) cmd "set_property" "pause" "false" ;;
-    s | pause) cmd "set_property" "pause" "true" > /dev/null ;;
-    T | toggle) toggle > /dev/null ;;
-    c | clear) cmd "stop" && truncate -s 0 "$PLAYLIST_FILE" > /dev/null ;;
-    N | next) cmd "playlist-next" > /dev/null ;;
-    P | prev) cmd "playlist-prev" > /dev/null ;;
-    j | jump) cmd "set_property" "playlist-pos" "$1" > /dev/null ;;
-    t | time) cmd "set_property" "time-pos" "$1" > /dev/null ;;
-    e | seek) cmd "add" "time-pos" "$1" > /dev/null ;;
+    s | pause) cmd "set_property" "pause" "true" ;;
+    T | toggle) toggle ;;
+    c | clear) cmd "stop" && truncate -s 0 "$PLAYLIST_FILE" ;;
+    N | next) cmd "playlist-next" ;;
+    P | prev) cmd "playlist-prev" ;;
+    j | jump) cmd "set_property" "playlist-pos" "$1" ;;
+    t | time) cmd "set_property" "time-pos" "$1" ;;
+    e | seek) cmd "add" "time-pos" "$1" ;;
     a | add) append "append-play" "$@" ;;
     d | del | delete) delete "$@" ;;
-    S | shuffle) cmd "playlist-shuffle" > /dev/null ;;
+    S | shuffle) shuffle ;;
     l | ls) list ;;
     save) save "$@" ;;
     load) load "$@" ;;
