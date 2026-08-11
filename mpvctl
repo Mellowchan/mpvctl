@@ -1,14 +1,11 @@
 #!/bin/sh
 
-playlist_file="$HOME"/.local/share/mpvd_playlist.m3u
-
-err() {
-	printf "Error: %s\n" "$@"
-	exit 1
-}
+PLAYLIST_FILE="$HOME"/.local/share/mpvd_playlist.m3u
+MPVD_PID="$(pgrep -f "input-ipc-server=$XDG_RUNTIME_DIR/mpvd")"
+MPVD_LOG="/tmp/mpvd.log"
 
 usage() {
-	cat <<EOFUSAGE
+    cat << EOFUSAGE
 $PROGNAME <cmd> [ARGS...]
 
 COMMANDS:
@@ -27,8 +24,13 @@ COMMANDS:
   C | cmd [...]		- send custom command
   a | add [...]		- add parameters to playlist
   d | del [i] [i]	- delete item or range
-  L | log		- list the mpvd logs
-  R | restart		- restart mpvd
+  save [file]			- save current playlist to file
+  load [file]			- load playlit from file
+  start				- start mpv server
+  stop				- stop mpv server
+  restart		- restart mpv server
+  status		- print mpv server status
+  L | log		- list the mpv server log
   h | help		- print usage
 
 PIPE:
@@ -37,144 +39,165 @@ PIPE:
 EOFUSAGE
 }
 
-recheck_mpvd() {
-	mpv_status="$(mpvd status | awk '{print $3}')"
+log() {
+    cat "$MPVD_LOG"
+}
 
-	if [ "$mpv_status" = "down" ]; then
-		mpvd start
-	fi
+err() {
+    printf "Error: %s\n" "$@"
+    exit 1
+}
+
+start() {
+    test -e "$PLAYLIST_FILE" || touch "$PLAYLIST_FILE"
+
+    if [ -z "$MPVD_PID" ]; then
+        setsid -f mpv \
+            --loop-playlist \
+            --cache=yes \
+            --cache-secs=60 \
+            --demuxer-max-bytes=256MiB \
+            --demuxer-readahead-secs=30 \
+            --no-video \
+            --idle=yes \
+            --playlist="$PLAYLIST_FILE" \
+            --input-ipc-server="$XDG_RUNTIME_DIR"/mpvd > "$MPVD_LOG" 2>&1
+    fi
+}
+
+stop() {
+    if [ -n "$MPVD_PID" ]; then
+        kill -9 "$MPVD_PID"
+    fi
+}
+
+restart() {
+    stop
+    MPVD_PID=""
+    start
+}
+
+status() {
+    if [ -n "$MPVD_PID" ]; then
+        echo "mpv server is running ($MPVD_PID)"
+        exit 0
+    else
+        echo 'mpv server is down'
+        exit 1
+    fi
+}
+
+recheck_mpvd() {
+    if [ -z "$MPVD_PID" ]; then
+        echo 'mpv server is down'
+        start
+        echo 'starting mpv server ...'
+        sleep 1
+    fi
 }
 
 cmd() {
-	cmd="$1"
-	args=""
-	idx=0
-	shift
-	for a in "$@"; do
-		[ $((idx = idx + 1)) -le "$#" ] && args="$args, "
-		case "${a}" in
-		true | false | [0-9]*) args="${args}${a}" ;;
-		*) args="${args}\"${a}\"" ;;
-		esac
-	done
-	printf '{ "command": ["%s"%s] }\n' "$cmd" "$args" | $UNIX_SOCK_CMD
+    cmd="$1"
+    args=""
+    idx=0
+    shift
+    for a in "$@"; do
+        [ $((idx = idx + 1)) -le "$#" ] && args="$args, "
+        case "${a}" in
+            true | false | [0-9]*) args="${args}${a}" ;;
+            *) args="${args}\"${a}\"" ;;
+        esac
+    done
+    printf '{ "command": ["%s"%s] }\n' "$cmd" "$args" | $UNIX_SOCK_CMD
 }
 
 append() {
-	opt="$1"
-	[ -n "$opt" ] && shift
-	if [ -t 0 ]; then
-		for f in "$@"; do
-			fullpath="$(realpath "$f")"
-			cmd "loadfile" "$fullpath" "$opt" >/dev/null
-			echo "$fullpath" >>"$playlist_file"
-		done
-	else
-		while read -r f; do
-			fullpath="$(realpath "$f")"
-			cmd "loadfile" "$fullpath" "$opt" >/dev/null
-			echo "$fullpath" >>"$playlist_file"
-		done
-	fi
+    opt="$1"
+    [ -n "$opt" ] && shift
+    if [ -t 0 ]; then
+        for f in "$@"; do
+            fullpath="$(realpath "$f")"
+            cmd "loadfile" "$fullpath" "$opt" > /dev/null
+            echo "$fullpath" >> "$PLAYLIST_FILE"
+        done
+    else
+        while read -r f; do
+            fullpath="$(realpath "$f")"
+            cmd "loadfile" "$fullpath" "$opt" > /dev/null
+            echo "$fullpath" >> "$PLAYLIST_FILE"
+        done
+    fi
 }
 
 delete() {
-	if [ -n "$2" ]; then
-		runs=$(($2 - $1))
-		for _ in $(seq "0" "$runs"); do
-			cmd "playlist-remove" "$1" >/dev/null
-		done
-	else
-		cmd "playlist-remove" "$1" >/dev/null
-	fi
+    if [ -n "$2" ]; then
+        runs=$(($2 - $1))
+        for _ in $(seq "0" "$runs"); do
+            cmd "playlist-remove" "$1" > /dev/null
+        done
+    else
+        cmd "playlist-remove" "$1" > /dev/null
+    fi
 
-	cmd "get_property" "playlist" | "${JQ_CMD}" -r .data[].filename >"$playlist_file"
+    cmd "get_property" "playlist" | "${JQ_CMD}" -r .data[].filename > "$PLAYLIST_FILE"
+}
+
+save() {
+    cmd "get_property" "playlist" | "${JQ_CMD}" -r .data[].filename > "$1"
+}
+
+load() {
+    cat "$1" > "$PLAYLIST_FILE"
 }
 
 list() {
-	recheck_mpvd
+    bold=$(tput bold)
+    normal=$(tput sgr0)
+    current_file="$(cmd "get_property" "filename" | "${JQ_CMD}" -r .data)"
+    files_count="$(cmd "get_property" "playlist" | "${JQ_CMD}" .data[].filename | wc -l)"
+    index=0
 
-	bold=$(tput bold)
-	normal=$(tput sgr0)
-	current_file="$(cmd "get_property" "filename" | "${JQ_CMD}" -r .data)"
-	files_count="$(cmd "get_property" "playlist" | "${JQ_CMD}" .data[].filename | wc -l)"
-	index=0
+    printf 'Playlist:\n'
+    cmd "get_property" "playlist" | "${JQ_CMD}" .data[].filename | while read -r var; do
+        filebasename="$(basename "$var" | sed 's/\"//g')"
+        if [ "$current_file" = "$filebasename" ]; then
+            printf "${bold}[%s] %s [*]${normal}\n" "$index" "${filebasename%.*}"
+        else
+            printf "[%s] %s\n" "$index" "${filebasename%.*}"
+        fi
+        index=$((index + 1))
+    done
 
-	printf 'Playlist:\n'
-	cmd "get_property" "playlist" | "${JQ_CMD}" .data[].filename | while read -r var; do
-		filebasename="$(basename "$var" | sed 's/\"//g')"
-		if [ "$current_file" = "$filebasename" ]; then
-			printf "${bold}[%s] %s [*]${normal}\n" "$index" "${filebasename%.*}"
-		else
-			printf "[%s] %s\n" "$index" "${filebasename%.*}"
-		fi
-		index=$((index + 1))
-	done
+    paused="$(cmd "get_property" "pause" | "${JQ_CMD}" -r .data)"
+    playback_secs="$(cmd "get_property" "playback-time" | "${JQ_CMD}" -r .data | awk -F '.' '{print $1}')"
+    duration_secs="$(cmd "get_property" "duration" | "${JQ_CMD}" -r .data | awk -F '.' '{print $1}')"
 
-	paused="$(cmd "get_property" "pause" | "${JQ_CMD}" -r .data)"
-	playback_secs="$(cmd "get_property" "playback-time" | "${JQ_CMD}" -r .data | awk -F '.' '{print $1}')"
-	duration_secs="$(cmd "get_property" "duration" | "${JQ_CMD}" -r .data | awk -F '.' '{print $1}')"
+    playback_h=$((playback_secs / 3600))
+    playback_m=$((playback_secs % 3600 / 60))
+    playback_s=$((playback_secs % 60))
 
-	playback_h=$((playback_secs / 3600))
-	playback_m=$((playback_secs % 3600 / 60))
-	playback_s=$((playback_secs % 60))
+    duration_h=$((duration_secs / 3600))
+    duration_m=$((duration_secs % 3600 / 60))
+    duration_s=$((duration_secs % 60))
 
-	duration_h=$((duration_secs / 3600))
-	duration_m=$((duration_secs % 3600 / 60))
-	duration_s=$((duration_secs % 60))
+    if [ "$paused" = "true" ] || [ "$files_count" -lt 1 ]; then
+        status="paused"
+    else
+        status="playing"
+    fi
 
-	if [ "$paused" = "true" ] || [ "$files_count" -lt 1 ]; then
-		status="paused"
-	else
-		status="playing"
-	fi
-
-	printf "\nstatus: %s, time: %s:%s:%s/%s:%s:%s, file: %s" \
-		"$status" "${playback_h}" "${playback_m}" "${playback_s}" \
-		"${duration_h}" "${duration_m}" "${duration_s}" "${current_file%.*}"
-}
-
-mpv_play() {
-	cmd "set_property" "pause" "false"
-}
-
-mpv_pause() {
-	cmd "set_property" "pause" "true"
+    printf "\nstatus: %s, time: %s:%s:%s/%s:%s:%s, file: %s" \
+        "$status" "${playback_h}" "${playback_m}" "${playback_s}" \
+        "${duration_h}" "${duration_m}" "${duration_s}" "${current_file%.*}"
 }
 
 toggle() {
-	paused="$(cmd "get_property" "pause" | "${JQ_CMD}" -r .data)"
-	if [ "$paused" = "true" ]; then
-		cmd "set_property" "pause" "false"
-	else
-		cmd "set_property" "pause" "true"
-	fi
-}
-
-cli() {
-	cmd="$1"
-	[ -z "$cmd" ] && list && exit 0
-	[ -n "$cmd" ] && shift
-	case "$cmd" in
-	O | prop) cmd "get_property" "$@" ;;
-	C | cmd) cmd "$@" ;;
-	p | play) mpv_play >/dev/null ;;
-	s | pause) mpv_pause >/dev/null ;;
-	T | toggle) toggle >/dev/null ;;
-	c | clear) cmd "stop" && truncate -s 0 "$playlist_file" >/dev/null ;;
-	N | next) cmd "playlist-next" >/dev/null ;;
-	P | prev) cmd "playlist-prev" >/dev/null ;;
-	j | jump) cmd "set_property" "playlist-pos" "$1" >/dev/null ;;
-	t | time) cmd "set_property" "time-pos" "$1" >/dev/null ;;
-	e | seek) cmd "add" "time-pos" "$1" >/dev/null ;;
-	a | add) append "append-play" "$@" ;;
-	d | del | delete) delete "$@" ;;
-	S | shuffle) cmd "playlist-shuffle" >/dev/null ;;
-	l | ls) list ;;
-	L | log) mpvd log ;;
-	R | restart) mpvd restart ;;
-	*) usage && exit 1 ;;
-	esac
+    paused="$(cmd "get_property" "pause" | "${JQ_CMD}" -r .data)"
+    if [ "$paused" = "true" ]; then
+        cmd "set_property" "pause" "false"
+    else
+        cmd "set_property" "pause" "true"
+    fi
 }
 
 : "${PROGNAME:="$0"}"
@@ -184,24 +207,52 @@ cli() {
 [ -z "$JQ_CMD" ] && err "could not find jq"
 
 if [ -z "$UNIX_SOCK_CMD" ]; then
-	if [ "$(command -v socat)" ]; then
-		UNIX_SOCK_CMD="socat - ${UNIX_SOCK_PATH}"
-	else
-		err "could not find socat"
-	fi
+    if [ "$(command -v socat)" ]; then
+        UNIX_SOCK_CMD="socat - ${UNIX_SOCK_PATH}"
+    else
+        err "could not find socat"
+    fi
 fi
 
-recheck_mpvd
+# check if command args are empty
+cmd="$1"
+[ -z "$cmd" ] && list && exit 0
+[ -n "$cmd" ] && shift
 
-if [ -t 0 ]; then
-	cli "$@"
-else
-	case "${opt:=$1}" in
-	append*)
-		shift
-		append "$opt"
-		;;
-	*) append "append-play" ;;
-	esac
-fi
+# recheck_mpvd commands
+case "$cmd" in
+    O | prop | C | cmd | p | play | s | pause | T | toggle | c | clear | \
+        N | next | P | prev | j | jump | t | time | e | seek | a | add | \
+        d | del | delete | S | shuffle | l | ls | save | load | L | log)
+        recheck_mpvd
+        ;;
+esac
+
+# main control flow for args
+case "$cmd" in
+    O | prop) cmd "get_property" "$@" ;;
+    C | cmd) cmd "$@" ;;
+    p | play) cmd "set_property" "pause" "false" ;;
+    s | pause) cmd "set_property" "pause" "true" > /dev/null ;;
+    T | toggle) toggle > /dev/null ;;
+    c | clear) cmd "stop" && truncate -s 0 "$PLAYLIST_FILE" > /dev/null ;;
+    N | next) cmd "playlist-next" > /dev/null ;;
+    P | prev) cmd "playlist-prev" > /dev/null ;;
+    j | jump) cmd "set_property" "playlist-pos" "$1" > /dev/null ;;
+    t | time) cmd "set_property" "time-pos" "$1" > /dev/null ;;
+    e | seek) cmd "add" "time-pos" "$1" > /dev/null ;;
+    a | add) append "append-play" "$@" ;;
+    d | del | delete) delete "$@" ;;
+    S | shuffle) cmd "playlist-shuffle" > /dev/null ;;
+    l | ls) list ;;
+    save) save "$@" ;;
+    load) load "$@" ;;
+    start) start ;;
+    stop) stop ;;
+    R | restart) restart ;;
+    status) status ;;
+    L | log) log ;;
+    *) usage && exit 1 ;;
+esac
+
 exit 0
