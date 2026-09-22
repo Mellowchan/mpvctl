@@ -87,6 +87,7 @@ Default (vi-like) keys:
   g / G        select first / last track
   enter        play the selected track
   space        toggle pause
+  p / s        play / pause
   h / l        previous / next track
   ← / →        seek 5s back / forward
   d            delete the selected entry
@@ -123,6 +124,8 @@ top = "g"          # select first
 bottom = "G"       # select last
 jump = "enter"     # play selected
 toggle = "space"   # toggle pause
+play = "p"        # play (unpause)
+pause = "s"       # pause
 prev = "h"         # previous track
 next = "l"         # next track
 seek_back = "left" # seek back

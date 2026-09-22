@@ -36,6 +36,9 @@
    `help` key binding, closed with `?`, `q` or `esc`), replacing the key-hint
    bar at the bottom; the status bar keeps a small `[? help]` hint and shows
    the actual configured help key.
+7. Added dedicated `play` (default `p`) and `pause` (default `s`) key binds
+   to the TUI next to the existing space toggle, mirroring the CLI command
+   mnemonics; configurable like every other binding via `[keys]`.
 5. Added optional toml config at $XDG_CONFIG_HOME/mpvctl/config.toml: a
    `playlists_dir` key (~ expanded; MPVCTL_PLAYLIST_DIR still overrides), a
    `[keys]` section rebinding every TUI action (crossterm key names like

@@ -274,6 +274,8 @@ fn handle_key(
 			app.command(obs, &json!(["set_property", "playlist-pos", selected]), "jump");
 		}
 		Action::Toggle => app.command(obs, &json!(["set_property", "pause", !app.paused]), "pause"),
+		Action::Play => app.command(obs, &json!(["set_property", "pause", false]), "play"),
+		Action::Pause => app.command(obs, &json!(["set_property", "pause", true]), "pause"),
 		Action::Prev => app.command(obs, &json!(["playlist-prev"]), "prev"),
 		Action::Next => app.command(obs, &json!(["playlist-next"]), "next"),
 		Action::SeekBack => app.command(obs, &json!(["add", "time-pos", -SEEK_STEP]), "seek"),
@@ -540,6 +542,8 @@ fn help_entries(bindings: &Keybindings) -> Vec<(String, String)> {
 		(b.bottom, "select last"),
 		(b.jump, "play selected track"),
 		(b.toggle, "toggle pause"),
+		(b.play, "play"),
+		(b.pause, "pause"),
 		(b.prev, "previous track"),
 		(b.next, "next track"),
 		(b.seek_back, "seek 5s back"),
