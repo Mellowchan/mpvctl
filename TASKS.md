@@ -1,8 +1,16 @@
 # TODO
 
-15. Solve a bug: Investigate why mpv daemon log window invoked by `L` key is empty while the `mpvctl log` command shows entries
-
 # DONE
+
+15. Fixed the empty TUI log view. Root cause: mpv's request_log_messages
+    only delivers messages emitted after the subscription, so with a paused
+    or idle daemon nothing new arrived and the view started empty, while
+    `mpvctl log` dumps the daemon log file that has the full history. The
+    observer now subscribes for the whole TUI session (so the buffer fills
+    even while the view is closed, and survives reconnects), and opening the
+    view seeds an empty buffer with the log file tail (A:/V: playback status
+    lines filtered out), i.e. exactly what `mpvctl log` shows, before the
+    live info-level events take over.
 
 14. Added volume control: CLI `v | vol [x]` (get, absolute set, or `+10`/`-10`
     relative like seek) and TUI `+`/`-` keys (±5, work in every view) plus a

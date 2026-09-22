@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 use std::error::Error;
+use std::fs;
 use std::io;
 use std::time::{Duration, Instant};
 
@@ -240,6 +241,9 @@ fn event_loop(
 	theme: &Theme,
 ) -> Result<(), Box<dyn Error>> {
 	let mut observer = connect(ctx);
+	if let Some(observer) = observer.as_ref() {
+		subscribe_logs(observer);
+	}
 	let mut app = App::new(observer.is_some());
 	let mut next_try = Instant::now();
 
@@ -277,9 +281,7 @@ fn event_loop(
 			if let Ok(new_observer) = Observer::connect(&ctx.sock, &PROPERTIES) {
 				app.server_up = true;
 				// resubscribe to log messages if the log view is open
-				if app.view == View::Log {
-					let _ = new_observer.send(&json!({"command": ["request_log_messages", LOG_LEVEL]}));
-				}
+				subscribe_logs(&new_observer);
 				observer = Some(new_observer);
 			}
 		}
@@ -317,7 +319,7 @@ fn handle_key(
 	}
 
 	if app.view == View::Log {
-		return handle_log_key(key, action, app, observer);
+		return handle_log_key(key, action, app);
 	}
 	if app.view == View::Playlists {
 		return handle_playlists_key(key, action, app, ctx);
@@ -413,7 +415,7 @@ fn handle_playlist_key(action: Action, app: &mut App, ctx: &Ctx, observer: &mut 
 				app.mode = Mode::Normal;
 			}
 		}
-		Action::LogView => open_log(app, observer),
+		Action::LogView => open_log(app, ctx),
 		Action::Browser => open_playlists(app, ctx),
 		Action::Command => app.mode = Mode::Command(String::new()),
 		Action::Help => app.show_help = true,
@@ -448,7 +450,7 @@ fn handle_command_key(key: KeyEvent, app: &mut App, ctx: &Ctx, observer: &mut Op
 
 /// Key handling for the log view: scroll with the movement keys, close with
 /// the log key or esc.
-fn handle_log_key(key: KeyEvent, action: Option<Action>, app: &mut App, observer: &mut Option<Observer>) -> bool {
+fn handle_log_key(key: KeyEvent, action: Option<Action>, app: &mut App) -> bool {
 	match action {
 		Some(Action::Quit) => true,
 		Some(Action::Command) => {
@@ -456,7 +458,7 @@ fn handle_log_key(key: KeyEvent, action: Option<Action>, app: &mut App, observer
 			false
 		}
 		Some(Action::LogView) => {
-			close_log(app, observer);
+			close_log(app);
 			false
 		}
 		Some(Action::Up) => {
@@ -480,7 +482,7 @@ fn handle_log_key(key: KeyEvent, action: Option<Action>, app: &mut App, observer
 			false
 		}
 		_ if matches!(key.code, KeyCode::Esc) => {
-			close_log(app, observer);
+			close_log(app);
 			false
 		}
 		_ => false,
@@ -601,22 +603,55 @@ fn handle_playlists_key(key: KeyEvent, action: Option<Action>, app: &mut App, ct
 	}
 }
 
-/// Open the log view and subscribe to daemon log messages.
-fn open_log(app: &mut App, observer: &mut Option<Observer>) {
+/// Open the log view. The buffer is seeded with the daemon log file tail
+/// (the same content `mpvctl log` shows) because mpv only streams log
+/// messages received after the subscription.
+fn open_log(app: &mut App, ctx: &Ctx) {
+	if app.log_lines.is_empty() {
+		seed_log(app, ctx);
+	}
 	app.view = View::Log;
 	app.log_follow = true;
 	app.log_offset = 0;
-	if let Some(observer) = observer.as_ref() {
-		let _ = observer.send(&json!({"command": ["request_log_messages", LOG_LEVEL]}));
-	}
 }
 
-/// Close the log view and stop the log message stream.
-fn close_log(app: &mut App, observer: &mut Option<Observer>) {
-	app.view = View::Playlist;
-	if let Some(observer) = observer.as_ref() {
-		let _ = observer.send(&json!({"command": ["request_log_messages", "no"]}));
+/// Replace the empty log buffer with the tail of the daemon log file.
+fn seed_log(app: &mut App, ctx: &Ctx) {
+	let Ok(content) = fs::read_to_string(&ctx.log_file) else {
+		return;
+	};
+	// the file also contains carriage-return separated status updates,
+	// which are just playback progress noise
+	let status_update = |l: &str| {
+		let l = l.trim_start();
+		l.starts_with("A: ")
+			|| l.starts_with("V: ")
+			|| l.starts_with("AV: ")
+			|| l.starts_with("(Paused)")
+			|| l == "Idle"
+	};
+	let mut lines: Vec<String> = content
+		.replace('\r', "\n")
+		.lines()
+		.map(|l| l.trim_end().to_owned())
+		.filter(|l| !l.is_empty() && !status_update(l))
+		.collect();
+	if lines.len() > LOG_BUFFER {
+		let cut = lines.len() - LOG_BUFFER;
+		lines.drain(..cut);
 	}
+	app.log_lines = lines;
+}
+
+/// Subscribe to daemon log messages for the whole session, so the buffer
+/// keeps filling even while the view is closed.
+fn subscribe_logs(observer: &Observer) {
+	let _ = observer.send(&json!({"command": ["request_log_messages", LOG_LEVEL]}));
+}
+
+/// Close the log view.
+fn close_log(app: &mut App) {
+	app.view = View::Playlist;
 }
 
 /// Run commands that change the playlist and refresh the playlist file in

@@ -107,7 +107,8 @@ Default (vi-like) keys:
   b            playlists browser: j/k move, m mark, a/enter append the
                selected/marked playlists to the main playlist, o overwrite
                the main playlist with them, r reload, b/esc close
-  L            daemon log view (j/k scroll, g/G, L/esc close)
+  L            daemon log view, seeded with the daemon log file and then
+               following live messages (j/k scroll, g/G, L/esc close)
   :            command prompt
   q (or ^C)    quit
 ```
