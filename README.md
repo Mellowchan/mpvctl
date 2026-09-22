@@ -31,6 +31,7 @@ COMMANDS:
   C | cmd [...]		- send custom command
   a | add [...]		- add parameters to playlist
   d | del [i] [i]	- delete item or range
+  m | move [i] [j]	- move item i in front of item j
   save [file]		- save current playlist to file
   load [file]		- load playlist from file
   start			- start mpv server

@@ -41,6 +41,7 @@ COMMANDS:
   C | cmd [...]		- send custom command
   a | add [...]		- add parameters to playlist
   d | del [i] [i]	- delete item or range
+  m | move [i] [j]	- move item i in front of item j
   save [file]		- save current playlist to file
   load [file]		- load playlist from file
   start			- start mpv server
@@ -199,6 +200,14 @@ fn shuffle(ctx: &Ctx) -> Result<(), Box<dyn Error>> {
 	Ok(())
 }
 
+fn r#move(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
+	let from = parse_index(args.first().ok_or_else(|| "move needs two indexes".to_string())?)?;
+	let to = parse_index(args.get(1).ok_or_else(|| "move needs two indexes".to_string())?)?;
+	cmd_quiet(&ctx.sock, &[json!(["playlist-move", from, to])])?;
+	playlist::refresh_from_mpv(&ctx.sock, &ctx.playlist_file)?;
+	Ok(())
+}
+
 fn save(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
 	let file = args.first().ok_or_else(|| "save needs a file".to_string())?;
 	let filenames = playlist::filenames(&ctx.sock)?;
@@ -327,6 +336,7 @@ fn run(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
 		}
 		"a" | "add" => append(ctx, rest),
 		"d" | "del" | "delete" => delete(ctx, rest),
+		"m" | "move" => r#move(ctx, rest),
 		"S" | "shuffle" => shuffle(ctx),
 		"l" | "ls" => list(ctx),
 		"save" => save(ctx, rest),
@@ -366,8 +376,8 @@ fn main() {
 	match args.first().map(String::as_str) {
 		Some(
 			"O" | "prop" | "C" | "cmd" | "p" | "play" | "s" | "pause" | "T" | "toggle" | "c" | "clear" | "N" | "next"
-			| "P" | "prev" | "j" | "jump" | "t" | "time" | "e" | "seek" | "a" | "add" | "d" | "del" | "delete" | "S"
-			| "shuffle" | "l" | "ls" | "save" | "load" | "log",
+			| "P" | "prev" | "j" | "jump" | "t" | "time" | "e" | "seek" | "a" | "add" | "d" | "del" | "delete" | "m"
+			| "move" | "S" | "shuffle" | "l" | "ls" | "save" | "load" | "log",
 		)
 		| None => daemon::recheck(&ctx.sock, &ctx.playlist_file, &ctx.log_file),
 		_ => {}
