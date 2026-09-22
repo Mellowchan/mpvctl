@@ -103,3 +103,47 @@ The `:` prompt accepts the commands `seek <s>`, `time <s>`, `jump <i>`,
 interface can do (except adding files). Messages and errors show up in the
 status bar; a dead mpv server is detected automatically and reconnected once
 it is back.
+
+## Configuration
+
+Optional toml config at `~/.config/mpvctl/config.toml` (respecting
+`$XDG_CONFIG_HOME`). Everything is optional, unknown values are warned about
+on stderr and fall back to the defaults:
+
+```toml
+# playlists directory (~ is expanded); MPVCTL_PLAYLIST_DIR overrides this
+playlists_dir = "~/.local/share/mpvctl/playlists"
+
+[keys]
+# crossterm key names: single chars, "ctrl-j", "alt-x", "enter", "left",
+# "f5", "space", ... (upper/lower case are different keys)
+up = "k"          # select previous
+down = "j"         # select next
+top = "g"          # select first
+bottom = "G"       # select last
+jump = "enter"     # play selected
+toggle = "space"   # toggle pause
+prev = "h"         # previous track
+next = "l"         # next track
+seek_back = "left" # seek back
+seek_fwd = "right" # seek forward
+delete = "d"       # delete selected entry
+move_up = "K"      # move selected entry up
+move_down = "J"    # move selected entry down
+shuffle = "S"
+clear = "c"
+command = ":"      # open the command prompt
+quit = "q"
+
+[colors]
+# ratatui color names: black, red, green, yellow, blue, magenta, cyan, gray,
+# dark_gray, light_red, light_green, light_yellow, light_blue, light_magenta,
+# light_cyan, white, reset
+border = "blue"        # playlist border and title
+current = "yellow"     # current track
+selected_fg = "black"  # selected entry
+selected_bg = "blue"
+status_fg = "black"    # status bar
+status_bg = "blue"
+hint = "dark_gray"     # key hints bar
+```

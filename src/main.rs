@@ -68,7 +68,7 @@ TUI:
 	);
 }
 
-fn home() -> PathBuf {
+pub(crate) fn home() -> PathBuf {
 	let home = env::var("HOME").map_err(|_| "HOME is not set").unwrap_or_else(|e| {
 		eprintln!("Error: {e}");
 		exit(1);
@@ -80,17 +80,13 @@ fn xdg_runtime_dir() -> PathBuf {
 	PathBuf::from(env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into()))
 }
 
-fn playlists_dir() -> PathBuf {
-	env::var("MPVCTL_PLAYLIST_DIR").map_or_else(|_| home().join(".local/share/mpvctl/playlists"), PathBuf::from)
-}
-
-fn new_ctx() -> Ctx {
+fn new_ctx(config: &config::Config) -> Ctx {
 	let progname = env::args().next().unwrap_or_else(|| "mpvctl".into());
 	Ctx {
 		progname,
 		sock: xdg_runtime_dir().join("mpvd"),
 		playlist_file: home().join(".local/share/mpvd_playlist.m3u"),
-		playlists_dir: playlists_dir(),
+		playlists_dir: config::playlists_dir(config),
 		log_file: PathBuf::from("/tmp/mpvd.log"),
 	}
 }
@@ -423,12 +419,15 @@ fn run(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
 }
 
 fn main() {
-	let ctx = new_ctx();
+	let config = config::load();
+	let ctx = new_ctx(&config);
 	let args: Vec<String> = env::args().skip(1).collect();
 
 	// no arguments in a terminal: run the TUI (pipes/scripts still get `list`)
 	if args.is_empty() && io::stdin().is_terminal() && io::stdout().is_terminal() {
-		if let Err(e) = tui::run(&ctx, &Keybindings::default(), &Theme::default()) {
+		let bindings = Keybindings::from_config(&config.keys);
+		let theme = Theme::from_config(&config.colors);
+		if let Err(e) = tui::run(&ctx, &bindings, &theme) {
 			eprintln!("Error: {e}");
 			exit(1);
 		}

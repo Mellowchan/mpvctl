@@ -1,6 +1,5 @@
 # TODO
 
-5. Add toml config to configure keybindings, TUI colors, and playlists file directory.
 
 # DONE
 
@@ -26,3 +25,11 @@
    cmd/restart, a status bar plus key-hint bar, and auto-reconnects when the
    server dies. Verified in a pty harness against an isolated --ao=null mpv:
    rendering, all keys, command mode, file syncing and daemon recovery.
+5. Added optional toml config at $XDG_CONFIG_HOME/mpvctl/config.toml: a
+   `playlists_dir` key (~ expanded; MPVCTL_PLAYLIST_DIR still overrides), a
+   `[keys]` section rebinding every TUI action (crossterm key names like
+   "ctrl-j", "enter", "f5") and a `[colors]` section for border, current
+   track, selection, status bar and hint colors. Missing/broken files and
+   invalid values warn on stderr and fall back to the vi-like defaults;
+   unit tests cover parsing, precedence and tilde expansion, and the pty
+   harness verified rebinding, colors and dir resolution end to end.

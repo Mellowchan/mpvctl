@@ -1,7 +1,13 @@
-//! TUI keybindings and colors with vi-like defaults.
+//! Configuration: keybindings, colors and paths for the TUI, with vi-like
+//! defaults and toml overrides from ~/.config/mpvctl/config.toml.
+
+use std::env;
+use std::fs;
+use std::path::PathBuf;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::style::Color;
+use serde::Deserialize;
 
 /// A key binding: key code plus ctrl/alt modifiers (shift is implied by the
 /// character itself, so `k` and `K` are different keys).
@@ -80,6 +86,40 @@ impl Default for Keybindings {
 }
 
 impl Keybindings {
+	/// Bindings from the defaults, overridden by the toml `[keys]` section.
+	pub fn from_config(config: &KeysToml) -> Self {
+		fn resolve(desc: &str, value: Option<&str>, default: Key) -> Key {
+			match value.map(parse_key) {
+				Some(Some(key)) => key,
+				Some(None) => {
+					eprintln!("mpvctl: ignoring invalid key binding for {desc}");
+					default
+				}
+				None => default,
+			}
+		}
+		let d = Self::default();
+		Self {
+			up: resolve("up", config.up.as_deref(), d.up),
+			down: resolve("down", config.down.as_deref(), d.down),
+			top: resolve("top", config.top.as_deref(), d.top),
+			bottom: resolve("bottom", config.bottom.as_deref(), d.bottom),
+			jump: resolve("jump", config.jump.as_deref(), d.jump),
+			toggle: resolve("toggle", config.toggle.as_deref(), d.toggle),
+			prev: resolve("prev", config.prev.as_deref(), d.prev),
+			next: resolve("next", config.next.as_deref(), d.next),
+			seek_back: resolve("seek_back", config.seek_back.as_deref(), d.seek_back),
+			seek_fwd: resolve("seek_fwd", config.seek_fwd.as_deref(), d.seek_fwd),
+			delete: resolve("delete", config.delete.as_deref(), d.delete),
+			move_up: resolve("move_up", config.move_up.as_deref(), d.move_up),
+			move_down: resolve("move_down", config.move_down.as_deref(), d.move_down),
+			shuffle: resolve("shuffle", config.shuffle.as_deref(), d.shuffle),
+			clear: resolve("clear", config.clear.as_deref(), d.clear),
+			command: resolve("command", config.command.as_deref(), d.command),
+			quit: resolve("quit", config.quit.as_deref(), d.quit),
+		}
+	}
+
 	/// Find the action bound to a key event.
 	#[must_use]
 	pub fn action_for(&self, event: KeyEvent) -> Option<Action> {
@@ -235,6 +275,32 @@ impl Default for Theme {
 	}
 }
 
+impl Theme {
+	/// Theme from the defaults, overridden by the toml `[colors]` section.
+	pub fn from_config(config: &ColorsToml) -> Self {
+		fn resolve(desc: &str, value: Option<&str>, default: Color) -> Color {
+			match value.map(parse_color) {
+				Some(Some(color)) => color,
+				Some(None) => {
+					eprintln!("mpvctl: ignoring invalid color for {desc}");
+					default
+				}
+				None => default,
+			}
+		}
+		let d = Self::default();
+		Self {
+			border: resolve("border", config.border.as_deref(), d.border),
+			current: resolve("current", config.current.as_deref(), d.current),
+			selected_fg: resolve("selected_fg", config.selected_fg.as_deref(), d.selected_fg),
+			selected_bg: resolve("selected_bg", config.selected_bg.as_deref(), d.selected_bg),
+			status_fg: resolve("status_fg", config.status_fg.as_deref(), d.status_fg),
+			status_bg: resolve("status_bg", config.status_bg.as_deref(), d.status_bg),
+			hint: resolve("hint", config.hint.as_deref(), d.hint),
+		}
+	}
+}
+
 /// Parse a color name (ratatui color names, case insensitive).
 #[must_use]
 pub fn parse_color(name: &str) -> Option<Color> {
@@ -259,6 +325,111 @@ pub fn parse_color(name: &str) -> Option<Color> {
 		"white" => Color::White,
 		_ => return None,
 	})
+}
+
+/// User configuration loaded from config.toml; everything is optional.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct Config {
+	pub playlists_dir: Option<String>,
+	pub keys: KeysToml,
+	pub colors: ColorsToml,
+}
+
+/// The `[keys]` section.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct KeysToml {
+	pub up: Option<String>,
+	pub down: Option<String>,
+	pub top: Option<String>,
+	pub bottom: Option<String>,
+	pub jump: Option<String>,
+	pub toggle: Option<String>,
+	pub prev: Option<String>,
+	pub next: Option<String>,
+	pub seek_back: Option<String>,
+	pub seek_fwd: Option<String>,
+	pub delete: Option<String>,
+	pub move_up: Option<String>,
+	pub move_down: Option<String>,
+	pub shuffle: Option<String>,
+	pub clear: Option<String>,
+	pub command: Option<String>,
+	pub quit: Option<String>,
+}
+
+/// The `[colors]` section.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct ColorsToml {
+	pub border: Option<String>,
+	pub current: Option<String>,
+	pub selected_fg: Option<String>,
+	pub selected_bg: Option<String>,
+	pub status_fg: Option<String>,
+	pub status_bg: Option<String>,
+	pub hint: Option<String>,
+}
+
+/// Path of the config file (`$XDG_CONFIG_HOME/mpvctl/config.toml`).
+#[must_use]
+pub fn config_path() -> PathBuf {
+	let dir = env::var_os("XDG_CONFIG_HOME")
+		.filter(|v| !v.is_empty())
+		.map_or_else(|| crate::home().join(".config"), PathBuf::from);
+	dir.join("mpvctl/config.toml")
+}
+
+/// Load the config file, warning and falling back to defaults when it is
+/// missing or invalid.
+#[must_use]
+pub fn load() -> Config {
+	let path = config_path();
+	let Ok(text) = fs::read_to_string(&path) else {
+		return Config::default();
+	};
+	match toml::from_str(&text) {
+		Ok(config) => config,
+		Err(e) => {
+			eprintln!("mpvctl: ignoring invalid config {}: {e}", path.display());
+			Config::default()
+		}
+	}
+}
+
+/// Expand a leading `~` to the given home directory.
+#[must_use]
+fn expand_tilde_with(home: &std::path::Path, value: &str) -> PathBuf {
+	let mut path = home.to_path_buf();
+	if let Some(rest) = value.strip_prefix('~') {
+		path.push(rest.trim_start_matches('/'));
+		path
+	} else {
+		PathBuf::from(value)
+	}
+}
+
+/// Resolve the playlists directory: the `MPVCTL_PLAYLIST_DIR` environment
+/// variable wins, then the config value, then the default.
+#[must_use]
+pub fn playlists_dir_from(config: Option<&str>, env_value: Option<&str>) -> PathBuf {
+	if let Some(dir) = env_value.filter(|v| !v.is_empty()) {
+		return PathBuf::from(dir);
+	}
+	match config.filter(|v| !v.trim().is_empty()) {
+		Some(dir) => expand_tilde_with(&crate::home(), dir),
+		None => crate::home().join(".local/share/mpvctl/playlists"),
+	}
+}
+
+/// Resolve the playlists directory for a loaded config.
+#[must_use]
+pub fn playlists_dir(config: &Config) -> PathBuf {
+	playlists_dir_from(
+		config.playlists_dir.as_deref(),
+		env::var("MPVCTL_PLAYLIST_DIR").ok().as_deref(),
+	)
 }
 
 #[cfg(test)]
@@ -325,6 +496,75 @@ mod tests {
 		assert_eq!(
 			bindings.action_for(key_event(KeyCode::Char('x'), KeyModifiers::NONE)),
 			None
+		);
+	}
+
+	#[test]
+	fn toml_overrides() {
+		let config: Config = toml::from_str(
+			r#"
+			playlists_dir = "~/music/playlists"
+
+			[keys]
+			up = "up"
+			quit = "Q"
+
+			[colors]
+			status_bg = "magenta"
+			"#,
+		)
+		.unwrap();
+		assert_eq!(config.playlists_dir.as_deref(), Some("~/music/playlists"));
+
+		let bindings = Keybindings::from_config(&config.keys);
+		assert_eq!(bindings.up, parse_key("up").unwrap());
+		assert_eq!(bindings.quit, parse_key("Q").unwrap());
+		// unset keys keep their defaults
+		assert_eq!(bindings.down, parse_key("j").unwrap());
+
+		let theme = Theme::from_config(&config.colors);
+		assert_eq!(theme.status_bg, Color::Magenta);
+		assert_eq!(theme.border, Color::Blue);
+	}
+
+	#[test]
+	fn toml_invalid_values_fall_back() {
+		let config: Config = toml::from_str(
+			r#"
+			[keys]
+			up = "not a key"
+			[colors]
+			border = "no such color"
+			"#,
+		)
+		.unwrap();
+		assert_eq!(Keybindings::from_config(&config.keys).up, parse_key("k").unwrap());
+		assert_eq!(Theme::from_config(&config.colors).border, Color::Blue);
+	}
+
+	#[test]
+	fn toml_broken_file_is_rejected() {
+		assert!(toml::from_str::<Config>("[keys\n").is_err());
+	}
+
+	#[test]
+	fn playlists_dir_precedence() {
+		let home = std::path::Path::new("/home/test");
+		// env wins
+		assert_eq!(
+			playlists_dir_from(Some("~/playlists"), Some("/env/dir")),
+			PathBuf::from("/env/dir")
+		);
+		// then config, with ~ expanded
+		assert_eq!(
+			expand_tilde_with(home, "~/playlists"),
+			PathBuf::from("/home/test/playlists")
+		);
+		assert_eq!(expand_tilde_with(home, "/abs"), PathBuf::from("/abs"));
+		// then the default
+		assert_eq!(
+			playlists_dir_from(None, None),
+			crate::home().join(".local/share/mpvctl/playlists")
 		);
 	}
 
