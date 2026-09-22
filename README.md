@@ -31,7 +31,7 @@ COMMANDS:
   C | cmd [...]		- send custom command
   a | add [...]		- add parameters to playlist
   d | del [i] [i]	- delete item or range
-  m | move [i] [j]	- move item i in front of item j
+  m | move [r] [j]	- move item or range r (e.g. 2 or 10-15) in front of item j
   save [file]		- save current playlist to file
   load [name]		- load playlist (name from the playlists dir or a path)
   pl | playlists	- list playlists in the playlists dir
@@ -62,6 +62,9 @@ playlists can be loaded by filename only:
 mpvctl pl          # list available playlists
 mpvctl load rock   # load ~/.local/share/mpvctl/playlists/rock(.m3u)
 ```
+
+`move` accepts a single index or an inclusive range: `mpvctl m 10-15 2`
+moves tracks 10 to 15 (order preserved) in front of track 2.
 
 The `.m3u` extension is optional in both directions (a playlist stored as
 `chill` can be loaded with `load chill.m3u` and vice versa). Names containing

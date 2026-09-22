@@ -45,6 +45,12 @@
    tail until the user scrolls (j/k/g/G); `L` or esc closes and unsubscribes
    (re-subscribing automatically after a daemon restart). Also reclaimed
    the row left empty by the removed hint bar for the main view.
+9. Extended CLI `move` with ranges: `mpvctl m 10-15 2` moves entries 10 to
+   15 (order preserved) in front of entry 2. Implemented as a pure command
+   builder (greedy single-entry `playlist-move` sequence derived from the
+   target order, unit tested against mpv's move semantics) shared by single
+   and range moves; invalid ranges, out-of-bounds and in-range targets are
+   rejected with clear errors.
 5. Added optional toml config at $XDG_CONFIG_HOME/mpvctl/config.toml: a
    `playlists_dir` key (~ expanded; MPVCTL_PLAYLIST_DIR still overrides), a
    `[keys]` section rebinding every TUI action (crossterm key names like

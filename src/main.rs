@@ -47,7 +47,7 @@ COMMANDS:
   C | cmd [...]		- send custom command
   a | add [...]		- add parameters to playlist
   d | del [i] [i]	- delete item or range
-  m | move [i] [j]	- move item i in front of item j
+  m | move [r] [j]	- move item or range r (e.g. 2 or 10-15) in front of item j
   save [file]		- save current playlist to file
   load [name]		- load playlist (name from the playlists dir or a path)
   pl | playlists	- list playlists in the playlists dir
@@ -209,10 +209,35 @@ fn shuffle(ctx: &Ctx) -> Result<(), Box<dyn Error>> {
 }
 
 pub(crate) fn r#move(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
-	let from = parse_index(args.first().ok_or_else(|| "move needs two indexes".to_string())?)?;
-	let to = parse_index(args.get(1).ok_or_else(|| "move needs two indexes".to_string())?)?;
-	playlist::run_commands_refresh(&ctx.sock, &[json!(["playlist-move", from, to])], &ctx.playlist_file)
-		.map_err(|e| -> Box<dyn Error> { e.into() })
+	let first = args
+		.first()
+		.ok_or_else(|| "move needs a range and an index".to_string())?;
+	let target = parse_index(
+		args.get(1)
+			.ok_or_else(|| "move needs a range and an index".to_string())?,
+	)?;
+	// first argument: single index or an inclusive "a-b" range
+	let range = first.split_once('-').and_then(|(x, y)| {
+		let (x, y) = (x.parse::<i64>().ok()?, y.parse::<i64>().ok()?);
+		Some((x, y))
+	});
+	let (a, b) = if let Some((a, b)) = range {
+		(a, b)
+	} else {
+		let i = parse_index(first)?;
+		(i, i)
+	};
+	if a < 0 || b < 0 || target < 0 {
+		return Err("move indexes must be non-negative".into());
+	}
+	if a > b {
+		return Err(format!("invalid range: {a}-{b}").into());
+	}
+	let len = playlist::filenames(&ctx.sock)?.len();
+	#[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+	let (a, b, target) = (a as usize, b as usize, target as usize);
+	let cmds = playlist::move_range_commands(len, a, b, Some(target))?;
+	playlist::run_commands_refresh(&ctx.sock, &cmds, &ctx.playlist_file).map_err(|e| -> Box<dyn Error> { e.into() })
 }
 
 fn save(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
