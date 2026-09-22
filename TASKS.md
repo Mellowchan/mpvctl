@@ -51,6 +51,13 @@
    target order, unit tested against mpv's move semantics) shared by single
    and range moves; invalid ranges, out-of-bounds and in-range targets are
    rejected with clear errors.
+10. Added vim-like visual selection to the TUI: `v` starts it at the
+   cursor, j/k/g/G extend the range (shown with the selection background
+   and a VISUAL flag in the status bar), then `d` deletes the whole range,
+   `J`/`K` move the block (reusing the range-move primitive from the CLI
+   move task, so single-entry moves gained correct end-of-list behavior),
+   and `v`/esc cancel. The anchor is clamped when the playlist changes.
+
 5. Added optional toml config at $XDG_CONFIG_HOME/mpvctl/config.toml: a
    `playlists_dir` key (~ expanded; MPVCTL_PLAYLIST_DIR still overrides), a
    `[keys]` section rebinding every TUI action (crossterm key names like

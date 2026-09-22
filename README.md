@@ -94,6 +94,8 @@ Default (vi-like) keys:
   h / l        previous / next track
   ← / →        seek 5s back / forward
   d            delete the selected entry
+  v            visual selection: extend with j/k/g/G, then d (delete),
+               J/K (move the whole block) or v/esc (cancel)
   K / J        move the selected entry up / down
   S            shuffle the playlist
   c            clear the playlist
@@ -140,6 +142,7 @@ move_down = "J"    # move selected entry down
 shuffle = "S"
 clear = "c"
 log = "L"        # open/close the daemon log view
+visual = "v"      # visual (multi) selection
 command = ":"      # open the command prompt
 help = "?"        # toggle the keymap window
 quit = "q"

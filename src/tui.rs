@@ -46,6 +46,10 @@ struct Entry {
 enum Mode {
 	#[default]
 	Normal,
+	/// visual selection from an anchor entry to the cursor
+	Visual {
+		anchor: usize,
+	},
 	Command(String),
 }
 
@@ -107,6 +111,14 @@ impl App {
 		self.entries.iter().position(|e| e.current)
 	}
 
+	/// The selected range in visual mode (anchor..=cursor), if active.
+	fn visual_range(&self) -> Option<(usize, usize)> {
+		match self.mode {
+			Mode::Visual { anchor } => Some((anchor.min(self.selected), anchor.max(self.selected))),
+			_ => None,
+		}
+	}
+
 	/// Move the selection by `delta` entries, clamped to the list.
 	#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_possible_wrap)]
 	fn select(&mut self, delta: i64) {
@@ -151,7 +163,14 @@ impl App {
 			match name {
 				"playlist" => {
 					self.entries = entries_from(data);
-					self.selected = self.selected.min(self.entries.len().saturating_sub(1));
+					let last = self.entries.len().saturating_sub(1);
+					self.selected = self.selected.min(last);
+					if let Mode::Visual { anchor } = &mut self.mode {
+						*anchor = (*anchor).min(last);
+					}
+					if self.entries.is_empty() {
+						self.mode = Mode::Normal;
+					}
 				}
 				"pause" => self.paused = data.and_then(Value::as_bool).unwrap_or(false),
 				"playback-time" => self.playback_time = data.and_then(Value::as_f64),
@@ -280,13 +299,25 @@ fn handle_key(
 		return false;
 	}
 
+	if matches!(key.code, KeyCode::Esc) && app.visual_range().is_some() {
+		app.mode = Mode::Normal;
+		return false;
+	}
+
 	let Some(action) = action else {
 		return false;
 	};
+	handle_playlist_key(action, app, ctx, observer)
+}
 
+/// Key handling for the playlist view (normal and visual mode).
+fn handle_playlist_key(action: Action, app: &mut App, ctx: &Ctx, observer: &mut Option<Observer>) -> bool {
 	let selected = app.selected;
 	let len = app.entries.len();
 	let obs = observer.as_mut();
+	// range the destructive operations apply to: the visual selection or
+	// just the cursor
+	let (a, b) = app.visual_range().unwrap_or((selected, selected));
 	match action {
 		Action::Up => app.select(-1),
 		Action::Down => app.select(1),
@@ -302,17 +333,43 @@ fn handle_key(
 		Action::Next => app.command(obs, &json!(["playlist-next"]), "next"),
 		Action::SeekBack => app.command(obs, &json!(["add", "time-pos", -SEEK_STEP]), "seek"),
 		Action::SeekFwd => app.command(obs, &json!(["add", "time-pos", SEEK_STEP]), "seek"),
-		Action::Delete if selected < len => {
-			mutate(app, ctx, &[json!(["playlist-remove", selected])], "delete");
+		Action::Visual => {
+			app.mode = if app.visual_range().is_some() {
+				Mode::Normal
+			} else {
+				Mode::Visual { anchor: app.selected }
+			};
 		}
-		Action::MoveUp if selected > 0 => {
-			if mutate(app, ctx, &[json!(["playlist-move", selected, selected - 1])], "move") {
-				app.selected = selected - 1;
+		Action::Delete if b < len => {
+			let cmds: Vec<Value> = (0..=b - a).map(|_| json!(["playlist-remove", a])).collect();
+			if mutate(app, ctx, &cmds, "delete") {
+				app.mode = Mode::Normal;
+				app.selected = a;
 			}
 		}
-		Action::MoveDown if selected + 1 < len => {
-			if mutate(app, ctx, &[json!(["playlist-move", selected, selected + 2])], "move") {
-				app.selected = selected + 1;
+		Action::MoveUp if a > 0 => match playlist::move_range_commands(len, a, b, Some(a - 1)) {
+			Ok(cmds) => {
+				if mutate(app, ctx, &cmds, "move") {
+					app.selected = selected.saturating_sub(1);
+					if let Mode::Visual { anchor } = &mut app.mode {
+						*anchor -= 1;
+					}
+				}
+			}
+			Err(e) => app.message(format!("move: {e}"), true),
+		},
+		Action::MoveDown if b + 1 < len => {
+			let before = if b + 2 < len { Some(b + 2) } else { None };
+			match playlist::move_range_commands(len, a, b, before) {
+				Ok(cmds) => {
+					if mutate(app, ctx, &cmds, "move") {
+						app.selected = selected + 1;
+						if let Mode::Visual { anchor } = &mut app.mode {
+							*anchor += 1;
+						}
+					}
+				}
+				Err(e) => app.message(format!("move: {e}"), true),
 			}
 		}
 		Action::Shuffle => {
@@ -321,6 +378,7 @@ fn handle_key(
 		Action::Clear => {
 			if mutate(app, ctx, &[json!(["stop"])], "clear") {
 				app.selected = 0;
+				app.mode = Mode::Normal;
 			}
 		}
 		Action::LogView => open_log(app, observer),
@@ -562,7 +620,7 @@ fn draw(f: &mut Frame, app: &mut App, bindings: &Keybindings, theme: &Theme) {
 	let bar_style = Style::new().fg(theme.status_fg).bg(theme.status_bg);
 	let bar = match &app.mode {
 		Mode::Command(input) => Line::from(format!(":{input}▌")),
-		Mode::Normal => status_line(app, theme, bindings),
+		Mode::Normal | Mode::Visual { .. } => status_line(app, theme, bindings),
 	};
 	f.render_widget(Paragraph::new(bar).style(bar_style), rows[1]);
 
@@ -578,6 +636,7 @@ fn draw_playlist(f: &mut Frame, area: ratatui::layout::Rect, app: &mut App, them
 	} else {
 		format!(" mpvctl ─ {} tracks ", app.entries.len())
 	};
+	let range = app.visual_range();
 	let items: Vec<ListItem> = app
 		.entries
 		.iter()
@@ -589,10 +648,20 @@ fn draw_playlist(f: &mut Frame, area: ratatui::layout::Rect, app: &mut App, them
 			} else {
 				format!("[{i}] {name}")
 			};
+			// visual range members (except the cursor row, which the list
+			// highlight styles) get the selection background
 			let style = if entry.current {
 				Style::new().fg(theme.current)
 			} else {
 				Style::new()
+			};
+			let style = if let Some((a, b)) = range
+				&& i >= a && i <= b
+				&& i != app.selected
+			{
+				style.bg(theme.selected_bg)
+			} else {
+				style
 			};
 			ListItem::new(text).style(style)
 		})
@@ -693,6 +762,7 @@ fn help_entries(bindings: &Keybindings) -> Vec<(String, String)> {
 		(b.shuffle, "shuffle playlist"),
 		(b.clear, "clear playlist"),
 		(b.log, "daemon log view"),
+		(b.visual, "visual selection (d/J/K on range)"),
 		(b.command, "command prompt"),
 		(b.help, "toggle this keymap"),
 		(b.quit, "quit"),
@@ -739,8 +809,14 @@ fn status_line(app: &App, theme: &Theme, bindings: &Keybindings) -> Line<'static
 		.map(|e| crate::display_name(&e.filename).to_owned())
 		.unwrap_or_default();
 	let help = key_label(bindings.help);
+	let visual = if app.visual_range().is_some() {
+		Span::raw("VISUAL ")
+	} else {
+		Span::raw("")
+	};
 	Line::from(vec![
 		Span::raw(format!(" {glyph} {state} ")),
+		visual,
 		Span::raw(format!("{time} ")),
 		Span::raw(format!("{position}/{} ", app.entries.len())),
 		Span::raw(name),
