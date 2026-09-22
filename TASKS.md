@@ -63,6 +63,11 @@
    (or cursor) playlists to the main playlist via mpv's `loadlist` while
    `o` overwrites it (first replace, rest appended); the m3u mirror is
    rewritten from the read-back so it always matches. b/esc closes.
+12. Optimized the release binary size in Cargo.toml: `[profile.release]`
+   with opt-level "z", fat LTO, one codegen unit, panic=abort and stripped
+   symbols, plus trimmed dependency default-features (ratatui without the
+   calendar widget/macros, toml parse-only). 1.82 MB -> 0.90 MB (-51%),
+   verified with the CLI regression suite and a TUI smoke test.
 
 5. Added optional toml config at $XDG_CONFIG_HOME/mpvctl/config.toml: a
    `playlists_dir` key (~ expanded; MPVCTL_PLAYLIST_DIR still overrides), a

@@ -10,6 +10,9 @@ runtime dependencies besides `mpv` itself (no jq, socat, pgrep, tput ...).
 make install
 ```
 
+Release builds are optimized for size (fat LTO, `opt-level = "z"`, stripped
+   symbols) in `Cargo.toml`.
+
 ## Usage
 
 ```
