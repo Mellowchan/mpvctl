@@ -32,6 +32,10 @@
    cmd/restart, a status bar plus key-hint bar, and auto-reconnects when the
    server dies. Verified in a pty harness against an isolated --ao=null mpv:
    rendering, all keys, command mode, file syncing and daemon recovery.
+6. Added a keymap window to the TUI, toggled by `?` (configurable via the
+   `help` key binding, closed with `?`, `q` or `esc`), replacing the key-hint
+   bar at the bottom; the status bar keeps a small `[? help]` hint and shows
+   the actual configured help key.
 5. Added optional toml config at $XDG_CONFIG_HOME/mpvctl/config.toml: a
    `playlists_dir` key (~ expanded; MPVCTL_PLAYLIST_DIR still overrides), a
    `[keys]` section rebinding every TUI action (crossterm key names like

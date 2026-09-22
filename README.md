@@ -102,7 +102,7 @@ The `:` prompt accepts the commands `seek <s>`, `time <s>`, `jump <i>`,
 `cmd <name> [args]`, `restart` and `q`, covering everything the command line
 interface can do (except adding files). Messages and errors show up in the
 status bar; a dead mpv server is detected automatically and reconnected once
-it is back.
+it is back. Press `?` for a keymap window (`q`/`esc` close it).
 
 ## Configuration
 
@@ -133,6 +133,7 @@ move_down = "J"    # move selected entry down
 shuffle = "S"
 clear = "c"
 command = ":"      # open the command prompt
+help = "?"        # toggle the keymap window
 quit = "q"
 
 [colors]

@@ -33,6 +33,7 @@ pub enum Action {
 	Shuffle,
 	Clear,
 	Command,
+	Help,
 	Quit,
 }
 
@@ -55,6 +56,7 @@ pub struct Keybindings {
 	pub shuffle: Key,
 	pub clear: Key,
 	pub command: Key,
+	pub help: Key,
 	pub quit: Key,
 }
 
@@ -80,6 +82,7 @@ impl Default for Keybindings {
 			shuffle: key("S"),
 			clear: key("c"),
 			command: key(":"),
+			help: key("?"),
 			quit: key("q"),
 		}
 	}
@@ -116,6 +119,7 @@ impl Keybindings {
 			shuffle: resolve("shuffle", config.shuffle.as_deref(), d.shuffle),
 			clear: resolve("clear", config.clear.as_deref(), d.clear),
 			command: resolve("command", config.command.as_deref(), d.command),
+			help: resolve("help", config.help.as_deref(), d.help),
 			quit: resolve("quit", config.quit.as_deref(), d.quit),
 		}
 	}
@@ -140,6 +144,7 @@ impl Keybindings {
 			(self.shuffle, Action::Shuffle),
 			(self.clear, Action::Clear),
 			(self.command, Action::Command),
+			(self.help, Action::Help),
 			(self.quit, Action::Quit),
 		];
 		table
@@ -356,6 +361,7 @@ pub struct KeysToml {
 	pub shuffle: Option<String>,
 	pub clear: Option<String>,
 	pub command: Option<String>,
+	pub help: Option<String>,
 	pub quit: Option<String>,
 }
 

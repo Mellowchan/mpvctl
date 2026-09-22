@@ -19,7 +19,7 @@ use ratatui::widgets::{Block, List, ListItem, ListState, Paragraph};
 use serde_json::{Value, json};
 
 use crate::Ctx;
-use crate::config::{Action, Key, Keybindings, Theme, key_label};
+use crate::config::{Action, Keybindings, Theme, key_label};
 use crate::daemon;
 use crate::ipc::{self, IpcMsg, Observer};
 use crate::playlist;
@@ -62,6 +62,7 @@ struct App {
 	message: Option<Message>,
 	server_up: bool,
 	list_state: ListState,
+	show_help: bool,
 	/// descriptions of commands awaiting a response, by request id
 	waiting: HashMap<u64, String>,
 }
@@ -247,7 +248,17 @@ fn handle_key(
 	if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
 		return true;
 	}
-	let Some(action) = bindings.action_for(key) else {
+	let action = bindings.action_for(key);
+
+	// while the keymap is open, any of the close keys just closes it
+	if app.show_help {
+		if action == Some(Action::Help) || matches!(key.code, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter) {
+			app.show_help = false;
+		}
+		return false;
+	}
+
+	let Some(action) = action else {
 		return false;
 	};
 
@@ -289,6 +300,7 @@ fn handle_key(
 			}
 		}
 		Action::Command => app.mode = Mode::Command(String::new()),
+		Action::Help => app.show_help = true,
 		Action::Quit => return true,
 		_ => {}
 	}
@@ -471,20 +483,89 @@ fn draw(f: &mut Frame, app: &mut App, bindings: &Keybindings, theme: &Theme) {
 	let bar_style = Style::new().fg(theme.status_fg).bg(theme.status_bg);
 	let bar = match &app.mode {
 		Mode::Command(input) => Line::from(format!(":{input}▌")),
-		Mode::Normal => status_line(app, theme),
+		Mode::Normal => status_line(app, theme, bindings),
 	};
 	f.render_widget(Paragraph::new(bar).style(bar_style), rows[1]);
 
-	// key hints
-	let hints = if matches!(app.mode, Mode::Command(_)) {
-		" esc cancel · enter run ".to_owned()
-	} else {
-		hint_line(bindings)
-	};
-	f.render_widget(Paragraph::new(hints).style(Style::new().fg(theme.hint)), rows[2]);
+	if app.show_help {
+		draw_help(f, area, bindings, theme);
+	}
 }
 
-fn status_line(app: &App, theme: &Theme) -> Line<'static> {
+/// Centered popup with the keymap, shown with the help key.
+fn draw_help(f: &mut Frame, area: ratatui::layout::Rect, bindings: &Keybindings, theme: &Theme) {
+	let entries = help_entries(bindings);
+	let half = entries.len().div_ceil(2);
+	let key_w = 8;
+	let desc_w = 24;
+	let body_w = (key_w + desc_w) * 2;
+	#[allow(clippy::cast_possible_truncation)]
+	let width = ((body_w + 2) as u16).min(area.width.saturating_sub(2)).max(10);
+	let footer = format!(
+		" {} prompt: seek time jump del move load save prop cmd restart ",
+		key_label(bindings.command)
+	);
+	#[allow(clippy::cast_possible_truncation)]
+	let height = (half as u16 + 3).min(area.height.saturating_sub(2));
+
+	let popup = centered_rect(area, width, height);
+	f.render_widget(ratatui::widgets::Clear, popup);
+	let mut lines = Vec::new();
+	for row in 0..half {
+		let (mut k2, mut d2) = (String::new(), String::new());
+		let (k1, d1) = entries[row].clone();
+		if let Some((k, d)) = entries.get(row + half) {
+			k2.clone_from(k);
+			d2.clone_from(d);
+		}
+		lines.push(Line::from(format!(
+			"{k1:<key_w$} {d1:<desc_w$} {k2:<key_w$} {d2:<desc_w$}"
+		)));
+	}
+	lines.push(Line::from(footer));
+	let block = Block::bordered()
+		.title(" keymap ")
+		.border_style(Style::new().fg(theme.border))
+		.style(Style::new().bg(theme.status_bg));
+	f.render_widget(Paragraph::new(lines).block(block), popup);
+}
+
+/// (key, description) pairs shown in the keymap popup.
+fn help_entries(bindings: &Keybindings) -> Vec<(String, String)> {
+	let b = bindings;
+	[
+		(b.up, "select previous"),
+		(b.down, "select next"),
+		(b.top, "select first"),
+		(b.bottom, "select last"),
+		(b.jump, "play selected track"),
+		(b.toggle, "toggle pause"),
+		(b.prev, "previous track"),
+		(b.next, "next track"),
+		(b.seek_back, "seek 5s back"),
+		(b.seek_fwd, "seek 5s forward"),
+		(b.delete, "delete entry"),
+		(b.move_up, "move entry up"),
+		(b.move_down, "move entry down"),
+		(b.shuffle, "shuffle playlist"),
+		(b.clear, "clear playlist"),
+		(b.command, "command prompt"),
+		(b.help, "toggle this keymap"),
+		(b.quit, "quit"),
+	]
+	.iter()
+	.map(|(k, d)| (key_label(*k), (*d).to_owned()))
+	.collect()
+}
+
+/// A centered rectangle inside `area` with the given size.
+fn centered_rect(area: ratatui::layout::Rect, width: u16, height: u16) -> ratatui::layout::Rect {
+	let x = area.x + area.width.saturating_sub(width) / 2;
+	let y = area.y + area.height.saturating_sub(height) / 2;
+	ratatui::layout::Rect::new(x, y, width.min(area.width), height.min(area.height))
+}
+
+fn status_line(app: &App, theme: &Theme, bindings: &Keybindings) -> Line<'static> {
 	if let Some(message) = &app.message
 		&& message.at.elapsed() < MESSAGE_TTL
 	{
@@ -513,30 +594,14 @@ fn status_line(app: &App, theme: &Theme) -> Line<'static> {
 		.find(|e| e.current)
 		.map(|e| crate::display_name(&e.filename).to_owned())
 		.unwrap_or_default();
+	let help = key_label(bindings.help);
 	Line::from(vec![
 		Span::raw(format!(" {glyph} {state} ")),
 		Span::raw(format!("{time} ")),
 		Span::raw(format!("{position}/{} ", app.entries.len())),
 		Span::raw(name),
+		Span::raw(format!(" [{help} help] ")),
 	])
-}
-
-fn hint_line(bindings: &Keybindings) -> String {
-	let pair = |a: Key, b: Key| format!("{}/{}", key_label(a), key_label(b));
-	format!(
-		" {} sel · {} play · {} pause · {} track · {} seek · {} del · {} move · {} shuffle · {} clear · {} cmd · {} quit ",
-		pair(bindings.up, bindings.down),
-		key_label(bindings.jump),
-		key_label(bindings.toggle),
-		pair(bindings.prev, bindings.next),
-		pair(bindings.seek_back, bindings.seek_fwd),
-		key_label(bindings.delete),
-		pair(bindings.move_up, bindings.move_down),
-		key_label(bindings.shuffle),
-		key_label(bindings.clear),
-		key_label(bindings.command),
-		key_label(bindings.quit),
-	)
 }
 
 fn fmt_secs(time: Option<f64>) -> String {
