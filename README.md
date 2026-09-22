@@ -33,7 +33,8 @@ COMMANDS:
   d | del [i] [i]	- delete item or range
   m | move [i] [j]	- move item i in front of item j
   save [file]		- save current playlist to file
-  load [file]		- load playlist from file
+  load [name]		- load playlist (name from the playlists dir or a path)
+  pl | playlists	- list playlists in the playlists dir
   start			- start mpv server
   stop			- stop mpv server
   restart		- restart mpv server
@@ -50,3 +51,23 @@ The daemon (started with `mpvctl start` or automatically on the first command)
 is an `mpv --idle` session listening on `$XDG_RUNTIME_DIR/mpvd` and using
 `~/.local/share/mpvd_playlist.m3u` as its playlist file. Commands that need a
 running server start one automatically.
+
+## Playlists directory
+
+`load` looks names up in a playlists directory (default
+`~/.local/share/mpvctl/playlists`, override with `MPVCTL_PLAYLIST_DIR`) so
+playlists can be loaded by filename only:
+
+```
+mpvctl pl          # list available playlists
+mpvctl load rock   # load ~/.local/share/mpvctl/playlists/rock(.m3u)
+```
+
+The `.m3u` extension is optional in both directions (a playlist stored as
+`chill` can be loaded with `load chill.m3u` and vice versa). Names containing
+a `/`, or names not found in the directory, are used as paths, so playlists
+outside the directory keep working:
+
+```
+mpvctl load ~/backups/old.m3u
+```

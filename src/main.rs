@@ -18,6 +18,7 @@ struct Ctx {
 	progname: String,
 	sock: PathBuf,
 	playlist_file: PathBuf,
+	playlists_dir: PathBuf,
 	log_file: PathBuf,
 }
 
@@ -43,7 +44,8 @@ COMMANDS:
   d | del [i] [i]	- delete item or range
   m | move [i] [j]	- move item i in front of item j
   save [file]		- save current playlist to file
-  load [file]		- load playlist from file
+  load [name]		- load playlist (name from the playlists dir or a path)
+  pl | playlists	- list playlists in the playlists dir
   start			- start mpv server
   stop			- stop mpv server
   restart		- restart mpv server
@@ -70,12 +72,17 @@ fn xdg_runtime_dir() -> PathBuf {
 	PathBuf::from(env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into()))
 }
 
+fn playlists_dir() -> PathBuf {
+	env::var("MPVCTL_PLAYLIST_DIR").map_or_else(|_| home().join(".local/share/mpvctl/playlists"), PathBuf::from)
+}
+
 fn new_ctx() -> Ctx {
 	let progname = env::args().next().unwrap_or_else(|| "mpvctl".into());
 	Ctx {
 		progname,
 		sock: xdg_runtime_dir().join("mpvd"),
 		playlist_file: home().join(".local/share/mpvd_playlist.m3u"),
+		playlists_dir: playlists_dir(),
 		log_file: PathBuf::from("/tmp/mpvd.log"),
 	}
 }
@@ -216,8 +223,50 @@ fn save(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
 }
 
 fn load(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
-	let file = args.first().ok_or_else(|| "load needs a file".to_string())?;
-	playlist::load(Path::new(file), &ctx.playlist_file)?;
+	let name = args.first().ok_or_else(|| "load needs a playlist".to_string())?;
+	let file = resolve_playlist(ctx, name);
+	playlist::load(&file, &ctx.playlist_file).map_err(|e| format!("{}: {e}", file.display()).into())
+}
+
+/// Resolve a playlist argument: names without a slash are looked up in the
+/// playlists directory (with or without the .m3u extension), anything else
+/// is used as a path so playlists outside the directory keep working.
+fn resolve_playlist(ctx: &Ctx, name: &str) -> PathBuf {
+	if name.contains('/') {
+		return PathBuf::from(name);
+	}
+	let dir = &ctx.playlists_dir;
+	let direct = dir.join(name);
+	if direct.is_file() {
+		return direct;
+	}
+	let with_ext = dir.join(format!("{name}.m3u"));
+	if with_ext.is_file() {
+		return with_ext;
+	}
+	if let Some(stem) = name.strip_suffix(".m3u") {
+		let stripped = dir.join(stem);
+		if stripped.is_file() {
+			return stripped;
+		}
+	}
+	PathBuf::from(name)
+}
+
+/// List the playlist files available in the playlists directory.
+fn list_playlists(ctx: &Ctx) -> Result<(), Box<dyn Error>> {
+	if !ctx.playlists_dir.is_dir() {
+		return Ok(());
+	}
+	let mut names: Vec<String> = fs::read_dir(&ctx.playlists_dir)?
+		.flatten()
+		.filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
+		.filter_map(|e| e.file_name().into_string().ok())
+		.collect();
+	names.sort();
+	for name in &names {
+		println!("{name}");
+	}
 	Ok(())
 }
 
@@ -341,6 +390,7 @@ fn run(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
 		"l" | "ls" => list(ctx),
 		"save" => save(ctx, rest),
 		"load" => load(ctx, rest),
+		"pl" | "playlists" => list_playlists(ctx),
 		"start" => {
 			daemon::start(&ctx.sock, &ctx.playlist_file, &ctx.log_file).map_err(|e| -> Box<dyn Error> { e.into() })
 		}
