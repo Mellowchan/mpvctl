@@ -1,5 +1,12 @@
 # TODO
 
+6. Add help keymap window to TUI binded by `?` key instead of bar keymap on the bottom
+7. Add keybind to pause and play to TUI (currently there's only toggle)
+8. Add keybind to show the mpv log in the TUI
+9. Add feature to cli to be able to move multiple files e.g. `mpvctl m 10-15 2` would move items in range 10 to 15 in front of item 2
+10. Add feature to TUI to select multiple items in the current playlist and to do operations like move or delete with multiple files
+11. Add feature to TUI to show playlists from playlists directory and select one or more to load track into the main playlist
+12. Add optimizations to Cargo.toml for the mpvctl binary release
 
 # DONE
 
