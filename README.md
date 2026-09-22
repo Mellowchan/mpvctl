@@ -71,3 +71,35 @@ outside the directory keep working:
 ```
 mpvctl load ~/backups/old.m3u
 ```
+
+## TUI
+
+Running `mpvctl` without arguments in a terminal opens an interactive
+interface (in pipes or scripts the old behavior, printing the playlist, is
+kept). It updates in realtime through observed mpv properties and has a
+status bar at the bottom showing play state, elapsed/total time, position in
+the playlist and the current track.
+
+Default (vi-like) keys:
+
+```
+  k / j        select previous / next track
+  g / G        select first / last track
+  enter        play the selected track
+  space        toggle pause
+  h / l        previous / next track
+  ← / →        seek 5s back / forward
+  d            delete the selected entry
+  K / J        move the selected entry up / down
+  S            shuffle the playlist
+  c            clear the playlist
+  :            command prompt
+  q (or ^C)    quit
+```
+
+The `:` prompt accepts the commands `seek <s>`, `time <s>`, `jump <i>`,
+`del <i> [j]`, `move <i> <j>`, `load <name>`, `save <file>`, `prop <name>`,
+`cmd <name> [args]`, `restart` and `q`, covering everything the command line
+interface can do (except adding files). Messages and errors show up in the
+status bar; a dead mpv server is detected automatically and reconnected once
+it is back.

@@ -1,6 +1,5 @@
 # TODO
 
-4. Add reatime TUI (ncurses like) interface with vi-like keybindings that should do what the command line arguments can do (exception is adding files to the playlist), and status bar on the bottom. The TUI should be invoked just by starting `./mpvctl` without any argument.
 5. Add toml config to configure keybindings, TUI colors, and playlists file directory.
 
 # DONE
@@ -19,3 +18,11 @@
    directory with an optional .m3u extension, while names with a '/' or not
    found there are still treated as paths so custom playlists outside the
    directory keep working.
+4. Added a realtime TUI (ratatui + crossterm) invoked by `mpvctl` without
+   arguments in a terminal (non-tty keeps printing the playlist). It observes
+   playlist/pause/time/duration properties over a persistent IPC connection,
+   has vi-like keybindings (k/j/g/G, enter, space, h/l, arrows seek, d, K/J,
+   S, c, q), a ':' command prompt with seek/time/jump/del/move/load/save/prop/
+   cmd/restart, a status bar plus key-hint bar, and auto-reconnects when the
+   server dies. Verified in a pty harness against an isolated --ao=null mpv:
+   rendering, all keys, command mode, file syncing and daemon recovery.

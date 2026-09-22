@@ -4,15 +4,19 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::ipc;
 
 /// Get the filenames of the current mpv playlist.
 pub fn filenames(sock: &Path) -> io::Result<Vec<String>> {
 	let data = ipc::property_data(sock, "playlist")?;
-	Ok(data
-		.as_array()
+	Ok(filenames_from(&data))
+}
+
+/// Extract the filenames from a playlist property value.
+fn filenames_from(data: &Value) -> Vec<String> {
+	data.as_array()
 		.map(|entries| {
 			entries
 				.iter()
@@ -20,12 +24,34 @@ pub fn filenames(sock: &Path) -> io::Result<Vec<String>> {
 				.map(str::to_owned)
 				.collect()
 		})
-		.unwrap_or_default())
+		.unwrap_or_default()
 }
 
-/// Write the current mpv playlist filenames to `file`.
-pub fn refresh_from_mpv(sock: &Path, file: &Path) -> io::Result<()> {
-	write_lines(file, &filenames(sock)?)
+const REFRESH_ID: u64 = 999;
+
+/// Run commands on a fresh connection and write the resulting playlist to
+/// `file` (single round trip, so commands and read-back cannot race).
+pub fn run_commands_refresh(sock: &Path, cmds: &[Value], file: &Path) -> io::Result<()> {
+	let mut requests: Vec<Value> = cmds
+		.iter()
+		.enumerate()
+		.map(|(i, c)| json!({"request_id": i as u64 + 1, "command": c}))
+		.collect();
+	requests.push(json!({"request_id": REFRESH_ID, "command": ["get_property", "playlist"]}));
+	let lines = ipc::Client::connect(sock)?.send(&requests)?;
+	for line in lines {
+		let Ok(v) = serde_json::from_str::<Value>(&line) else {
+			continue;
+		};
+		if v.get("request_id").and_then(Value::as_u64) == Some(REFRESH_ID) {
+			let error = v.get("error").and_then(Value::as_str).unwrap_or_default();
+			if error != ipc::SUCCESS {
+				return Err(io::Error::other(format!("could not read playlist: {error}")));
+			}
+			return write_lines(file, &filenames_from(v.get("data").unwrap_or(&Value::Null)));
+		}
+	}
+	Err(io::Error::other("no playlist response from mpv"))
 }
 
 /// Append paths to the playlist file.

@@ -7,12 +7,17 @@ use std::process::exit;
 
 use serde_json::{Value, json};
 
+mod config;
 mod daemon;
 mod ipc;
 mod playlist;
+mod tui;
+
+use config::{Keybindings, Theme};
 
 const BOLD: &str = "\x1b[1m";
-const NORMAL: &str = "\x1b[0m";
+/// reset sequence as emitted by `tput sgr0` on xterm terminals
+const NORMAL: &str = "\x1b(B\x1b[m";
 
 struct Ctx {
 	progname: String,
@@ -56,6 +61,9 @@ COMMANDS:
 PIPE:
   find ~/music/ -type f | {progname}
 
+TUI:
+  run {progname} without arguments in a terminal
+
 "
 	);
 }
@@ -98,7 +106,7 @@ fn basename(path: &str) -> &str {
 	path.rsplit('/').next().unwrap_or(path)
 }
 
-fn display_name(filename: &str) -> &str {
+pub(crate) fn display_name(filename: &str) -> &str {
 	strip_ext(basename(filename))
 }
 
@@ -179,7 +187,7 @@ fn append(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
 	Ok(())
 }
 
-fn delete(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
+pub(crate) fn delete(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
 	let from = parse_index(
 		args.first()
 			.ok_or_else(|| "del needs an index or a range".to_string())?,
@@ -196,23 +204,19 @@ fn delete(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
 		None => 1,
 	};
 	let commands: Vec<Value> = (0..removes).map(|_| json!(["playlist-remove", from])).collect();
-	cmd_quiet(&ctx.sock, &commands)?;
-	playlist::refresh_from_mpv(&ctx.sock, &ctx.playlist_file)?;
-	Ok(())
+	playlist::run_commands_refresh(&ctx.sock, &commands, &ctx.playlist_file).map_err(|e| -> Box<dyn Error> { e.into() })
 }
 
 fn shuffle(ctx: &Ctx) -> Result<(), Box<dyn Error>> {
-	cmd_quiet(&ctx.sock, &[json!(["playlist-shuffle"])])?;
-	playlist::refresh_from_mpv(&ctx.sock, &ctx.playlist_file)?;
-	Ok(())
+	playlist::run_commands_refresh(&ctx.sock, &[json!(["playlist-shuffle"])], &ctx.playlist_file)
+		.map_err(|e| -> Box<dyn Error> { e.into() })
 }
 
-fn r#move(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
+pub(crate) fn r#move(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
 	let from = parse_index(args.first().ok_or_else(|| "move needs two indexes".to_string())?)?;
 	let to = parse_index(args.get(1).ok_or_else(|| "move needs two indexes".to_string())?)?;
-	cmd_quiet(&ctx.sock, &[json!(["playlist-move", from, to])])?;
-	playlist::refresh_from_mpv(&ctx.sock, &ctx.playlist_file)?;
-	Ok(())
+	playlist::run_commands_refresh(&ctx.sock, &[json!(["playlist-move", from, to])], &ctx.playlist_file)
+		.map_err(|e| -> Box<dyn Error> { e.into() })
 }
 
 fn save(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
@@ -231,7 +235,7 @@ fn load(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
 /// Resolve a playlist argument: names without a slash are looked up in the
 /// playlists directory (with or without the .m3u extension), anything else
 /// is used as a path so playlists outside the directory keep working.
-fn resolve_playlist(ctx: &Ctx, name: &str) -> PathBuf {
+pub(crate) fn resolve_playlist(ctx: &Ctx, name: &str) -> PathBuf {
 	if name.contains('/') {
 		return PathBuf::from(name);
 	}
@@ -421,6 +425,15 @@ fn run(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
 fn main() {
 	let ctx = new_ctx();
 	let args: Vec<String> = env::args().skip(1).collect();
+
+	// no arguments in a terminal: run the TUI (pipes/scripts still get `list`)
+	if args.is_empty() && io::stdin().is_terminal() && io::stdout().is_terminal() {
+		if let Err(e) = tui::run(&ctx, &Keybindings::default(), &Theme::default()) {
+			eprintln!("Error: {e}");
+			exit(1);
+		}
+		exit(0);
+	}
 
 	// commands that need a running mpv server (starting it if it is down)
 	match args.first().map(String::as_str) {

@@ -74,19 +74,40 @@ pub fn stop(sock: &Path) {
 	}
 }
 
+/// Is a daemon process running and its IPC socket accepting connections?
+fn socket_ready(sock: &Path) -> bool {
+	find_pid(sock).is_some() && UnixStream::connect(sock).is_ok()
+}
+
+/// Make sure the mpv daemon is running and its socket is accepting
+/// connections, starting the daemon if needed. Silent version of
+/// `recheck` for the TUI.
+pub fn ensure_running(sock: &Path, playlist_file: &Path, log_file: &Path) -> io::Result<()> {
+	if socket_ready(sock) {
+		return Ok(());
+	}
+	for _ in 0..100 {
+		if find_pid(sock).is_none() {
+			// no-op if a daemon came up in the meantime
+			start(sock, playlist_file, log_file)?;
+		}
+		if socket_ready(sock) {
+			return Ok(());
+		}
+		thread::sleep(Duration::from_millis(100));
+	}
+	Err(io::Error::new(io::ErrorKind::TimedOut, "mpv server did not come up"))
+}
+
 /// Make sure the mpv daemon is running, starting (and waiting for) it if needed.
 pub fn recheck(sock: &Path, playlist_file: &Path, log_file: &Path) {
-	if find_pid(sock).is_some() {
+	if socket_ready(sock) {
 		return;
 	}
 	println!("mpv server is down");
-	if let Err(e) = start(sock, playlist_file, log_file) {
+	if let Err(e) = ensure_running(sock, playlist_file, log_file) {
 		eprintln!("Error: {e}");
 		std::process::exit(1);
 	}
 	println!("starting mpv server ...");
-	// wait until the process exists and its IPC socket accepts connections
-	while find_pid(sock).is_none() || UnixStream::connect(sock).is_err() {
-		thread::sleep(Duration::from_millis(100));
-	}
 }
