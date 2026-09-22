@@ -344,7 +344,7 @@ fn list(ctx: &Ctx) -> Result<(), Box<dyn Error>> {
 	let (pb, du) = playlist_times(playback, duration);
 	let volume = volume.map_or_else(|| "?".to_owned(), |v| format!("{v:.0}%"));
 	println!(
-		"\nstatus: {}, time: {}:{}:{}/{}:{}:{}, volume: {}, file: {}",
+		"\nstatus: {}, time: {}:{}:{}/{}:{}:{}, vol: {}, file: {}",
 		if is_paused { "paused" } else { "playing" },
 		pb / 3600,
 		pb % 3600 / 60,

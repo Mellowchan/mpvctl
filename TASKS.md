@@ -1,7 +1,5 @@
 # TODO
 
-19. Shorten the 'volume' in the cli output to just 'vol'
-
 # DONE
 
 1. Rewrote mpvctl in rust (serde_json for JSON IPC over std unix sockets, libc
@@ -100,3 +98,8 @@
     (fetched in the same batched round trip; `?` if unavailable). Verified
     against a live daemon at several volumes and with the CLI regression
     suite (identical to the shell tool apart from the new segment).
+
+19. Shortened the `mpvctl ls` status line volume segment from `volume:` to
+    `vol:` (`status: paused, time: 0:0:0/0:0:2, vol: 55%, file: track1`),
+    matching the TUI status bar wording. CLI regression suite still
+    identical apart from the volume segment.
