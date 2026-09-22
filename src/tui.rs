@@ -1059,7 +1059,7 @@ fn status_line(app: &App, theme: &Theme, bindings: &Keybindings) -> Line<'static
 	};
 	let volume = app
 		.volume
-		.map_or_else(|| Span::raw(""), |v| Span::raw(format!("vol {v:.0} ")));
+		.map_or_else(|| Span::raw(""), |v| Span::raw(format!("vol {v:.0}% ")));
 	Line::from(vec![
 		Span::raw(format!(" {glyph} {state} ")),
 		visual,

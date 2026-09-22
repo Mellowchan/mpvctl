@@ -1,13 +1,10 @@
 # TODO
 
-# DONE
+17. Make the TUI volume to show '%' sign after the value number
+18. Add keybind for '=' to reset the volume back to 100%
+19. Shorten the 'volume' in the cli output to just 'vol'
 
-16. The daemon volume now shows in both status places: the TUI status bar
-    (live via the observed volume property, added with the volume task) and
-    the `mpvctl ls` bottom status line, which gained a `volume: N%` segment
-    (fetched in the same batched round trip; `?` if unavailable). Verified
-    against a live daemon at several volumes and with the CLI regression
-    suite (identical to the shell tool apart from the new segment).
+# DONE
 
 1. Rewrote mpvctl in rust (serde_json for JSON IPC over std unix sockets, libc
    for signals, /proc scan for pid detection) replacing jq/socat/pgrep/tput;
@@ -92,3 +89,13 @@
     view seeds an empty buffer with the log file tail (A:/V: playback status
     lines filtered out), i.e. exactly what `mpvctl log` shows, before the
     live info-level events take over.
+
+17. The TUI status bar volume now shows a percent sign after the value
+    (`vol 42%` instead of `vol 42`).
+
+16. The daemon volume now shows in both status places: the TUI status bar
+    (live via the observed volume property, added with the volume task) and
+    the `mpvctl ls` bottom status line, which gained a `volume: N%` segment
+    (fetched in the same batched round trip; `?` if unavailable). Verified
+    against a live daemon at several volumes and with the CLI regression
+    suite (identical to the shell tool apart from the new segment).
