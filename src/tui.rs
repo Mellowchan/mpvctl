@@ -858,32 +858,39 @@ fn draw_help(f: &mut Frame, area: ratatui::layout::Rect, bindings: &Keybindings,
 	let body_w = (key_w + desc_w) * 2;
 	#[allow(clippy::cast_possible_truncation)]
 	let width = ((body_w + 2) as u16).min(area.width.saturating_sub(2)).max(10);
-	let footer = format!(
-		" {} prompt: seek time jump del move load save prop cmd restart ",
-		key_label(bindings.command)
-	);
 	#[allow(clippy::cast_possible_truncation)]
 	let height = (half as u16 + 3).min(area.height.saturating_sub(2));
 
-	let popup = centered_rect(area, width, height);
-	f.render_widget(ratatui::widgets::Clear, popup);
+	// keys are highlighted, descriptions dim, on a dark background
+	let key_style = Style::new().fg(theme.help_key).bg(theme.help_bg).bold();
+	let desc_style = Style::new().fg(theme.help_fg).bg(theme.help_bg);
+	let pair = |(k, d): &(String, String), kw: usize, dw: usize| {
+		vec![
+			Span::styled(format!("{k:<kw$}"), key_style),
+			Span::styled(format!("{d:<dw$}"), desc_style),
+		]
+	};
 	let mut lines = Vec::new();
 	for row in 0..half {
-		let (mut k2, mut d2) = (String::new(), String::new());
-		let (k1, d1) = entries[row].clone();
-		if let Some((k, d)) = entries.get(row + half) {
-			k2.clone_from(k);
-			d2.clone_from(d);
+		let mut spans = pair(&entries[row], key_w, desc_w);
+		spans.push(Span::raw(" "));
+		if let Some(entry) = entries.get(row + half) {
+			spans.extend(pair(entry, key_w, desc_w));
 		}
-		lines.push(Line::from(format!(
-			"{k1:<key_w$} {d1:<desc_w$} {k2:<key_w$} {d2:<desc_w$}"
-		)));
+		lines.push(Line::from(spans).style(desc_style));
 	}
-	lines.push(Line::from(footer));
+	lines.push(Line::from(format!(
+		" {} prompt: seek time jump del move load save prop cmd restart ",
+		key_label(bindings.command)
+	)));
+
+	let popup = centered_rect(area, width, height);
+	f.render_widget(ratatui::widgets::Clear, popup);
 	let block = Block::bordered()
 		.title(" keymap ")
-		.border_style(Style::new().fg(theme.border))
-		.style(Style::new().bg(theme.status_bg));
+		.title_bottom(format!(" {} / esc close ", key_label(bindings.help)))
+		.border_style(Style::new().fg(theme.help_key).bg(theme.help_bg))
+		.style(Style::new().bg(theme.help_bg));
 	f.render_widget(Paragraph::new(lines).block(block), popup);
 }
 

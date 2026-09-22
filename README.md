@@ -169,4 +169,7 @@ selected_bg = "blue"
 status_fg = "black"    # status bar
 status_bg = "blue"
 hint = "dark_gray"     # key hints bar
+help_bg = "black"      # keymap popup background
+help_fg = "gray"       # keymap popup descriptions
+help_key = "yellow"    # keymap popup keys (bold)
 ```

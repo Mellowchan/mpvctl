@@ -1,6 +1,14 @@
 # TODO
 
-13. Make the help keymap invoked by `?` nicer, e.g. put border around, make it to have dark background and color highlight for the keys listed
+14. Add feature to change audio volume for the mpv deamon from both cli and TUI
+15. Solve a bug: Investigate why mpv daemon log window invoked by `L` key is empty while the `mpvctl log` command shows entries
+
+# DONE
+
+13. Styled the TUI keymap popup: dark background with a colored border and
+    bottom close hint, and the listed keys are now highlighted (bold
+    yellow by default) next to dim gray descriptions. New `[colors]`
+    options `help_bg`/`help_fg`/`help_key` control it. Make the help keymap invoked by `?` nicer, e.g. put border around, make it to have dark background and color highlight for the keys listed
 14. Add feature to change audio volume for the mpv deamon from both cli and TUI
 15. Solve a bug: Investigate why mpv daemon log window invoked by `L` key is empty while the `mpvctl log` command shows entries
 

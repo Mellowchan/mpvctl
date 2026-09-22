@@ -306,6 +306,9 @@ pub struct Theme {
 	pub status_fg: Color,
 	pub status_bg: Color,
 	pub hint: Color,
+	pub help_bg: Color,
+	pub help_fg: Color,
+	pub help_key: Color,
 }
 
 impl Default for Theme {
@@ -321,6 +324,9 @@ impl Default for Theme {
 			status_fg: color("black"),
 			status_bg: color("blue"),
 			hint: color("dark_gray"),
+			help_bg: color("black"),
+			help_fg: color("gray"),
+			help_key: color("yellow"),
 		}
 	}
 }
@@ -347,6 +353,9 @@ impl Theme {
 			status_fg: resolve("status_fg", config.status_fg.as_deref(), d.status_fg),
 			status_bg: resolve("status_bg", config.status_bg.as_deref(), d.status_bg),
 			hint: resolve("hint", config.hint.as_deref(), d.hint),
+			help_bg: resolve("help_bg", config.help_bg.as_deref(), d.help_bg),
+			help_fg: resolve("help_fg", config.help_fg.as_deref(), d.help_fg),
+			help_key: resolve("help_key", config.help_key.as_deref(), d.help_key),
 		}
 	}
 }
@@ -430,6 +439,9 @@ pub struct ColorsToml {
 	pub status_fg: Option<String>,
 	pub status_bg: Option<String>,
 	pub hint: Option<String>,
+	pub help_bg: Option<String>,
+	pub help_fg: Option<String>,
+	pub help_key: Option<String>,
 }
 
 /// Path of the config file (`$XDG_CONFIG_HOME/mpvctl/config.toml`).
