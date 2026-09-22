@@ -25,7 +25,7 @@ COMMANDS:
   a | add [...]		- add parameters to playlist
   d | del [i] [i]	- delete item or range
   save [file]		- save current playlist to file
-  load [file]		- load playlit from file
+  load [file]		- load playlist from file
   start			- start mpv server
   stop			- stop mpv server
   restart		- restart mpv server
