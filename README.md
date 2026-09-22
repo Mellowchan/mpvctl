@@ -98,6 +98,7 @@ Default (vi-like) keys:
   h / l        previous / next track
   ← / →        seek 5s back / forward
   + / -        volume up / down by 5
+  =            reset volume to 100%
   d            delete the selected entry
   v            visual selection: extend with j/k/g/G, then d (delete),
                J/K (move the whole block) or v/esc (cancel)
@@ -148,6 +149,7 @@ seek_back = "left" # seek back
 seek_fwd = "right" # seek forward
 vol_up = "+"       # volume up 5
 vol_down = "-"     # volume down 5
+vol_reset = "="    # reset volume to 100%
 delete = "d"       # delete selected entry
 move_up = "K"      # move selected entry up
 move_down = "J"    # move selected entry down

@@ -41,6 +41,8 @@ const MESSAGE_TTL: Duration = Duration::from_secs(3);
 const SEEK_STEP: i64 = 5;
 /// Volume change per `vol_up`/`vol_down` press.
 const VOL_STEP: f64 = 5.0;
+/// Volume the `vol_reset` key restores.
+const DEFAULT_VOLUME: f64 = 100.0;
 /// Log level requested from mpv while the log view is open.
 const LOG_LEVEL: &str = "info";
 /// Maximum number of buffered log lines.
@@ -313,6 +315,14 @@ fn handle_key(
 		}
 		Some(Action::VolDown) => {
 			app.command(observer.as_mut(), &json!(["add", "volume", -VOL_STEP]), "volume");
+			return false;
+		}
+		Some(Action::VolReset) => {
+			app.command(
+				observer.as_mut(),
+				&json!(["set_property", "volume", DEFAULT_VOLUME]),
+				"volume",
+			);
 			return false;
 		}
 		_ => {}
@@ -998,6 +1008,7 @@ fn help_entries(bindings: &Keybindings) -> Vec<(String, String)> {
 		(b.seek_fwd, "seek 5s forward"),
 		(b.vol_up, "volume up"),
 		(b.vol_down, "volume down"),
+		(b.vol_reset, "reset volume to 100%"),
 		(b.delete, "delete entry"),
 		(b.move_up, "move entry up"),
 		(b.move_down, "move entry down"),

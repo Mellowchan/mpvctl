@@ -1,7 +1,5 @@
 # TODO
 
-17. Make the TUI volume to show '%' sign after the value number
-18. Add keybind for '=' to reset the volume back to 100%
 19. Shorten the 'volume' in the cli output to just 'vol'
 
 # DONE
@@ -90,6 +88,9 @@
     lines filtered out), i.e. exactly what `mpvctl log` shows, before the
     live info-level events take over.
 
+18. Added a `vol_reset` TUI binding (default `=`) that sets the volume back
+    to 100%; like `+`/`-` it works in every view and is listed in the keymap
+    window and the README config example.
 17. The TUI status bar volume now shows a percent sign after the value
     (`vol 42%` instead of `vol 42`).
 
