@@ -29,6 +29,7 @@ COMMANDS:
   S | shuffle		- shuffle the playlist
   j | jump [i]		- jump to index in playlist
   e | seek [i]		- seek in seconds
+  v | vol [x]		- get/set volume (e.g. 50, +10, -10)
   t | time [i]		- jump to time in seconds
   O | prop [...]	- get property
   C | cmd [...]		- send custom command
@@ -96,6 +97,7 @@ Default (vi-like) keys:
   p / s        play / pause
   h / l        previous / next track
   ← / →        seek 5s back / forward
+  + / -        volume up / down by 5
   d            delete the selected entry
   v            visual selection: extend with j/k/g/G, then d (delete),
                J/K (move the whole block) or v/esc (cancel)
@@ -111,9 +113,10 @@ Default (vi-like) keys:
 ```
 
 The `:` prompt accepts the commands `seek <s>`, `time <s>`, `jump <i>`,
-`del <i> [j]`, `move <i> <j>`, `load <name>`, `save <file>`, `prop <name>`,
-`cmd <name> [args]`, `restart` and `q`, covering everything the command line
-interface can do (except adding files). Messages and errors show up in the
+`del <i> [j]`, `move <i> <j>`, `vol [x]`, `load <name>`, `save <file>`,
+`prop <name>`, `cmd <name> [args]`, `restart` and `q`, covering everything the
+command line interface can do (except adding files). The current volume is
+shown in the status bar. Messages and errors show up in the
 status bar; a dead mpv server is detected automatically and reconnected once
 it is back. Press `?` for a keymap window (`q`/`esc` close it).
 
@@ -142,6 +145,8 @@ prev = "h"         # previous track
 next = "l"         # next track
 seek_back = "left" # seek back
 seek_fwd = "right" # seek forward
+vol_up = "+"       # volume up 5
+vol_down = "-"     # volume down 5
 delete = "d"       # delete selected entry
 move_up = "K"      # move selected entry up
 move_down = "J"    # move selected entry down
