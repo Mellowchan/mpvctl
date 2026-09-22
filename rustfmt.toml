@@ -1,0 +1,28 @@
+#unstable_features = true
+edition = "2024"
+newline_style = "unix"
+
+hard_tabs = true
+format_strings = false
+fn_single_line = true
+force_multiline_blocks = false
+control_brace_style = "ClosingNextLine"
+fn_params_layout = "Tall"
+indent_style = "Block"
+imports_layout = "Vertical"
+merge_derives = false
+reorder_modules = true
+imports_granularity = "Crate"
+use_field_init_shorthand = true
+use_try_shorthand = true
+
+wrap_comments = true
+normalize_doc_attributes = true
+
+reorder_impl_items = true
+group_imports = "StdExternalCrate"
+
+max_width = 120
+#struct_lit_width = 120
+#chain_width = 120
+#fn_call_width = 120
