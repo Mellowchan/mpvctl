@@ -94,6 +94,7 @@ Default (vi-like) keys:
   K / J        move the selected entry up / down
   S            shuffle the playlist
   c            clear the playlist
+  L            daemon log view (j/k scroll, g/G, L/esc close)
   :            command prompt
   q (or ^C)    quit
 ```
@@ -135,6 +136,7 @@ move_up = "K"      # move selected entry up
 move_down = "J"    # move selected entry down
 shuffle = "S"
 clear = "c"
+log = "L"        # open/close the daemon log view
 command = ":"      # open the command prompt
 help = "?"        # toggle the keymap window
 quit = "q"

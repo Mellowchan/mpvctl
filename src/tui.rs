@@ -32,6 +32,10 @@ const RECONNECT: Duration = Duration::from_secs(1);
 const MESSAGE_TTL: Duration = Duration::from_secs(3);
 /// Seconds added/removed by the seek keys.
 const SEEK_STEP: i64 = 5;
+/// Log level requested from mpv while the log view is open.
+const LOG_LEVEL: &str = "info";
+/// Maximum number of buffered log lines.
+const LOG_BUFFER: usize = 2000;
 
 struct Entry {
 	filename: String,
@@ -45,6 +49,14 @@ enum Mode {
 	Command(String),
 }
 
+/// Which list the main area shows.
+#[derive(Default, PartialEq, Eq, Clone, Copy)]
+enum View {
+	#[default]
+	Playlist,
+	Log,
+}
+
 struct Message {
 	text: String,
 	error: bool,
@@ -52,6 +64,7 @@ struct Message {
 }
 
 #[derive(Default)]
+#[allow(clippy::struct_excessive_bools)]
 struct App {
 	entries: Vec<Entry>,
 	paused: bool,
@@ -62,6 +75,13 @@ struct App {
 	message: Option<Message>,
 	server_up: bool,
 	list_state: ListState,
+	view: View,
+	/// ring buffer of recent daemon log lines
+	log_lines: Vec<String>,
+	/// follow the log tail (false once the user scrolled up)
+	log_follow: bool,
+	/// lines scrolled up from the tail when not following
+	log_offset: usize,
 	show_help: bool,
 	/// descriptions of commands awaiting a response, by request id
 	waiting: HashMap<u64, String>,
@@ -115,6 +135,15 @@ impl App {
 
 	/// Apply a JSON message received from mpv.
 	fn apply(&mut self, v: &Value) {
+		if v.get("event").and_then(Value::as_str) == Some("log-message") {
+			if let Some(text) = v.get("text").and_then(Value::as_str) {
+				self.log_lines.push(text.trim_end().to_owned());
+				if self.log_lines.len() > LOG_BUFFER {
+					self.log_lines.drain(..self.log_lines.len() - LOG_BUFFER);
+				}
+			}
+			return;
+		}
 		if v.get("event").and_then(Value::as_str) == Some("property-change") {
 			self.server_up = true;
 			let name = v.get("name").and_then(Value::as_str).unwrap_or_default();
@@ -212,6 +241,10 @@ fn event_loop(
 			next_try = Instant::now() + RECONNECT;
 			if let Ok(new_observer) = Observer::connect(&ctx.sock, &PROPERTIES) {
 				app.server_up = true;
+				// resubscribe to log messages if the log view is open
+				if app.view == View::Log {
+					let _ = new_observer.send(&json!({"command": ["request_log_messages", LOG_LEVEL]}));
+				}
 				observer = Some(new_observer);
 			}
 		}
@@ -226,29 +259,18 @@ fn handle_key(
 	observer: &mut Option<Observer>,
 	bindings: &Keybindings,
 ) -> bool {
-	if let Mode::Command(input) = &mut app.mode {
-		match key.code {
-			KeyCode::Esc => app.mode = Mode::Normal,
-			KeyCode::Enter => {
-				let line = std::mem::take(input);
-				app.mode = Mode::Normal;
-				if run_command(&line, app, ctx, observer) {
-					return true;
-				}
-			}
-			KeyCode::Backspace => {
-				input.pop();
-			}
-			KeyCode::Char(c) => input.push(c),
-			_ => {}
-		}
-		return false;
+	if matches!(app.mode, Mode::Command(_)) {
+		return handle_command_key(key, app, ctx, observer);
 	}
 
 	if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
 		return true;
 	}
 	let action = bindings.action_for(key);
+
+	if app.view == View::Log {
+		return handle_log_key(key, action, app, observer);
+	}
 
 	// while the keymap is open, any of the close keys just closes it
 	if app.show_help {
@@ -301,12 +323,95 @@ fn handle_key(
 				app.selected = 0;
 			}
 		}
+		Action::LogView => open_log(app, observer),
 		Action::Command => app.mode = Mode::Command(String::new()),
 		Action::Help => app.show_help = true,
 		Action::Quit => return true,
 		_ => {}
 	}
 	false
+}
+
+/// Key handling for the ':' prompt.
+fn handle_command_key(key: KeyEvent, app: &mut App, ctx: &Ctx, observer: &mut Option<Observer>) -> bool {
+	let Mode::Command(ref mut input) = app.mode else {
+		return false;
+	};
+	match key.code {
+		KeyCode::Esc => app.mode = Mode::Normal,
+		KeyCode::Enter => {
+			let line = std::mem::take(input);
+			app.mode = Mode::Normal;
+			if run_command(&line, app, ctx, observer) {
+				return true;
+			}
+		}
+		KeyCode::Backspace => {
+			input.pop();
+		}
+		KeyCode::Char(c) => input.push(c),
+		_ => {}
+	}
+	false
+}
+
+/// Key handling for the log view: scroll with the movement keys, close with
+/// the log key or esc.
+fn handle_log_key(key: KeyEvent, action: Option<Action>, app: &mut App, observer: &mut Option<Observer>) -> bool {
+	match action {
+		Some(Action::Quit) => true,
+		Some(Action::Command) => {
+			app.mode = Mode::Command(String::new());
+			false
+		}
+		Some(Action::LogView) => {
+			close_log(app, observer);
+			false
+		}
+		Some(Action::Up) => {
+			app.log_follow = false;
+			app.log_offset = (app.log_offset + 1).min(app.log_lines.len());
+			false
+		}
+		Some(Action::Down) => {
+			app.log_offset = app.log_offset.saturating_sub(1);
+			app.log_follow = app.log_offset == 0;
+			false
+		}
+		Some(Action::Top) => {
+			app.log_follow = false;
+			app.log_offset = app.log_lines.len();
+			false
+		}
+		Some(Action::Bottom) => {
+			app.log_follow = true;
+			app.log_offset = 0;
+			false
+		}
+		_ if matches!(key.code, KeyCode::Esc) => {
+			close_log(app, observer);
+			false
+		}
+		_ => false,
+	}
+}
+
+/// Open the log view and subscribe to daemon log messages.
+fn open_log(app: &mut App, observer: &mut Option<Observer>) {
+	app.view = View::Log;
+	app.log_follow = true;
+	app.log_offset = 0;
+	if let Some(observer) = observer.as_ref() {
+		let _ = observer.send(&json!({"command": ["request_log_messages", LOG_LEVEL]}));
+	}
+}
+
+/// Close the log view and stop the log message stream.
+fn close_log(app: &mut App, observer: &mut Option<Observer>) {
+	app.view = View::Playlist;
+	if let Some(observer) = observer.as_ref() {
+		let _ = observer.send(&json!({"command": ["request_log_messages", "no"]}));
+	}
 }
 
 /// Run commands that change the playlist and refresh the playlist file in
@@ -445,9 +550,29 @@ fn draw(f: &mut Frame, app: &mut App, bindings: &Keybindings, theme: &Theme) {
 	if area.height < 5 || area.width < 8 {
 		return;
 	}
-	let rows = Layout::vertical([Constraint::Min(3), Constraint::Length(1), Constraint::Length(1)]).split(area);
+	let rows = Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).split(area);
 
-	// playlist
+	if app.view == View::Log {
+		draw_log(f, rows[0], app, theme);
+	} else {
+		draw_playlist(f, rows[0], app, theme);
+	}
+
+	// status bar (or command prompt)
+	let bar_style = Style::new().fg(theme.status_fg).bg(theme.status_bg);
+	let bar = match &app.mode {
+		Mode::Command(input) => Line::from(format!(":{input}▌")),
+		Mode::Normal => status_line(app, theme, bindings),
+	};
+	f.render_widget(Paragraph::new(bar).style(bar_style), rows[1]);
+
+	if app.show_help {
+		draw_help(f, area, bindings, theme);
+	}
+}
+
+/// The playlist view.
+fn draw_playlist(f: &mut Frame, area: ratatui::layout::Rect, app: &mut App, theme: &Theme) {
 	let title = if app.entries.is_empty() {
 		" mpvctl ".to_owned()
 	} else {
@@ -479,19 +604,33 @@ fn draw(f: &mut Frame, app: &mut App, bindings: &Keybindings, theme: &Theme) {
 				.border_style(Style::new().fg(theme.border)),
 		)
 		.highlight_style(Style::new().fg(theme.selected_fg).bg(theme.selected_bg));
-	f.render_stateful_widget(list, rows[0], &mut app.list_state);
+	f.render_stateful_widget(list, area, &mut app.list_state);
+}
 
-	// status bar (or command prompt)
-	let bar_style = Style::new().fg(theme.status_fg).bg(theme.status_bg);
-	let bar = match &app.mode {
-		Mode::Command(input) => Line::from(format!(":{input}▌")),
-		Mode::Normal => status_line(app, theme, bindings),
+/// The daemon log view (follows the tail unless the user scrolled up).
+fn draw_log(f: &mut Frame, area: ratatui::layout::Rect, app: &App, theme: &Theme) {
+	let height = area.height.saturating_sub(2) as usize;
+	let total = app.log_lines.len();
+	let end = if app.log_follow {
+		total
+	} else {
+		total.saturating_sub(app.log_offset).max(height.min(total))
 	};
-	f.render_widget(Paragraph::new(bar).style(bar_style), rows[1]);
-
-	if app.show_help {
-		draw_help(f, area, bindings, theme);
+	let end = end.min(total);
+	let start = end.saturating_sub(height);
+	let mut lines: Vec<Line> = app.log_lines[start..end]
+		.iter()
+		.map(|l| Line::from(l.as_str()))
+		.collect();
+	while lines.len() < height {
+		lines.push(Line::from(""));
 	}
+	let follow = if app.log_follow { "following" } else { "paused" };
+	let title = format!(" mpv log ─ {follow} ");
+	let block = Block::bordered()
+		.title(title)
+		.border_style(Style::new().fg(theme.border));
+	f.render_widget(Paragraph::new(lines).block(block), area);
 }
 
 /// Centered popup with the keymap, shown with the help key.
@@ -553,6 +692,7 @@ fn help_entries(bindings: &Keybindings) -> Vec<(String, String)> {
 		(b.move_down, "move entry down"),
 		(b.shuffle, "shuffle playlist"),
 		(b.clear, "clear playlist"),
+		(b.log, "daemon log view"),
 		(b.command, "command prompt"),
 		(b.help, "toggle this keymap"),
 		(b.quit, "quit"),

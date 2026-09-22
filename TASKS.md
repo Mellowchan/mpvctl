@@ -39,6 +39,12 @@
 7. Added dedicated `play` (default `p`) and `pause` (default `s`) key binds
    to the TUI next to the existing space toggle, mirroring the CLI command
    mnemonics; configurable like every other binding via `[keys]`.
+8. Added a daemon log view to the TUI (default key `L`): it subscribes to
+   mpv's `request_log_messages` (info level) over the observer connection
+   and streams `log-message` events into a 2000 line buffer, following the
+   tail until the user scrolls (j/k/g/G); `L` or esc closes and unsubscribes
+   (re-subscribing automatically after a daemon restart). Also reclaimed
+   the row left empty by the removed hint bar for the main view.
 5. Added optional toml config at $XDG_CONFIG_HOME/mpvctl/config.toml: a
    `playlists_dir` key (~ expanded; MPVCTL_PLAYLIST_DIR still overrides), a
    `[keys]` section rebinding every TUI action (crossterm key names like
