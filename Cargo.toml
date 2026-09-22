@@ -1,0 +1,20 @@
+[package]
+name = "mpvctl"
+version = "1.0.0"
+edition = "2024"
+description = "Control a long running mpv music daemon from the command line"
+
+[workspace]
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+unwrap_in_result = "warn"
+
+[lints]
+workspace = true
+
+[dependencies]
+libc = "0.2"
+serde_json = "1"

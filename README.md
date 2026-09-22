@@ -1,6 +1,8 @@
 # mpvctl
 
-Shell script to control a long running mpv from command line.
+Terminal tool written in rust to control a long running mpv music daemon from
+the command line. It talks to mpv over its JSON IPC unix socket, so it has no
+runtime dependencies besides `mpv` itself (no jq, socat, pgrep, tput ...).
 
 ## Installation
 
@@ -9,10 +11,6 @@ make install
 ```
 
 ## Usage
-
-```
-mpvd start|stop|restart|status|log
-```
 
 ```
 mpvctl <cmd> [ARGS...]
@@ -34,7 +32,7 @@ COMMANDS:
   a | add [...]		- add parameters to playlist
   d | del [i] [i]	- delete item or range
   save [file]		- save current playlist to file
-  load [file]		- load playlit from file
+  load [file]		- load playlist from file
   start			- start mpv server
   stop			- stop mpv server
   restart		- restart mpv server
@@ -43,6 +41,11 @@ COMMANDS:
   h | help		- print usage
 
 PIPE:
-  find ~/music/ -type f | $PROGNAME
+  find ~/music/ -type f | mpvctl
 
 ```
+
+The daemon (started with `mpvctl start` or automatically on the first command)
+is an `mpv --idle` session listening on `$XDG_RUNTIME_DIR/mpvd` and using
+`~/.local/share/mpvd_playlist.m3u` as its playlist file. Commands that need a
+running server start one automatically.
