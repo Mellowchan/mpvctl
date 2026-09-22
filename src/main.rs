@@ -42,6 +42,7 @@ COMMANDS:
   S | shuffle		- shuffle the playlist
   j | jump [i]		- jump to index in playlist
   e | seek [i]		- seek in seconds
+  v | vol [x]		- get/set volume (e.g. 50, +10, -10)
   t | time [i]		- jump to time in seconds
   O | prop [...]	- get property
   C | cmd [...]		- send custom command
@@ -402,6 +403,11 @@ fn run(ctx: &Ctx, args: &[String]) -> Result<(), Box<dyn Error>> {
 			let amount = rest.first().ok_or_else(|| "seek needs an amount".to_string())?;
 			cmd(ctx, "add", &["time-pos".into(), amount.clone()])
 		}
+		"v" | "vol" | "volume" => match rest.first() {
+			None => cmd(ctx, "get_property", &["volume".into()]),
+			Some(v) if v.starts_with('+') || v.starts_with('-') => cmd(ctx, "add", &["volume".into(), v.clone()]),
+			Some(v) => cmd(ctx, "set_property", &["volume".into(), v.clone()]),
+		},
 		"a" | "add" => append(ctx, rest),
 		"d" | "del" | "delete" => delete(ctx, rest),
 		"m" | "move" => r#move(ctx, rest),
@@ -457,8 +463,8 @@ fn main() {
 	match args.first().map(String::as_str) {
 		Some(
 			"O" | "prop" | "C" | "cmd" | "p" | "play" | "s" | "pause" | "T" | "toggle" | "c" | "clear" | "N" | "next"
-			| "P" | "prev" | "j" | "jump" | "t" | "time" | "e" | "seek" | "a" | "add" | "d" | "del" | "delete" | "m"
-			| "move" | "S" | "shuffle" | "l" | "ls" | "save" | "load" | "log",
+			| "P" | "prev" | "j" | "jump" | "t" | "time" | "e" | "seek" | "v" | "vol" | "volume" | "a" | "add" | "d"
+			| "del" | "delete" | "m" | "move" | "S" | "shuffle" | "l" | "ls" | "save" | "load" | "log",
 		)
 		| None => daemon::recheck(&ctx.sock, &ctx.playlist_file, &ctx.log_file),
 		_ => {}

@@ -25,13 +25,21 @@ use crate::ipc::{self, IpcMsg, Observer};
 use crate::playlist;
 
 /// Observed properties and their ids on the persistent connection.
-const PROPERTIES: [(&str, u64); 4] = [("playlist", 1), ("pause", 2), ("playback-time", 3), ("duration", 4)];
+const PROPERTIES: [(&str, u64); 5] = [
+	("playlist", 1),
+	("pause", 2),
+	("playback-time", 3),
+	("duration", 4),
+	("volume", 5),
+];
 
 const TICK: Duration = Duration::from_millis(100);
 const RECONNECT: Duration = Duration::from_secs(1);
 const MESSAGE_TTL: Duration = Duration::from_secs(3);
 /// Seconds added/removed by the seek keys.
 const SEEK_STEP: i64 = 5;
+/// Volume change per `vol_up`/`vol_down` press.
+const VOL_STEP: f64 = 5.0;
 /// Log level requested from mpv while the log view is open.
 const LOG_LEVEL: &str = "info";
 /// Maximum number of buffered log lines.
@@ -75,6 +83,7 @@ struct App {
 	paused: bool,
 	playback_time: Option<f64>,
 	duration: Option<f64>,
+	volume: Option<f64>,
 	selected: usize,
 	mode: Mode,
 	message: Option<Message>,
@@ -181,6 +190,7 @@ impl App {
 				"pause" => self.paused = data.and_then(Value::as_bool).unwrap_or(false),
 				"playback-time" => self.playback_time = data.and_then(Value::as_f64),
 				"duration" => self.duration = data.and_then(Value::as_f64),
+				"volume" => self.volume = data.and_then(Value::as_f64),
 				_ => {}
 			}
 			return;
@@ -292,6 +302,19 @@ fn handle_key(
 		return true;
 	}
 	let action = bindings.action_for(key);
+
+	// volume keys work in every view
+	match action {
+		Some(Action::VolUp) => {
+			app.command(observer.as_mut(), &json!(["add", "volume", VOL_STEP]), "volume");
+			return false;
+		}
+		Some(Action::VolDown) => {
+			app.command(observer.as_mut(), &json!(["add", "volume", -VOL_STEP]), "volume");
+			return false;
+		}
+		_ => {}
+	}
 
 	if app.view == View::Log {
 		return handle_log_key(key, action, app, observer);
@@ -609,6 +632,33 @@ fn mutate(app: &mut App, ctx: &Ctx, cmds: &[Value], desc: &str) -> bool {
 /// ok with an optional status message, or an error text to display
 type CmdResult = Result<Option<String>, String>;
 
+/// `vol [x]` command: no argument shows the volume, `+x`/`-x` is relative,
+/// a plain number is absolute.
+fn vol_command(arg: Option<&String>, ctx: &Ctx) -> CmdResult {
+	let Some(x) = arg else {
+		return match ipc::get_property(&ctx.sock, "volume") {
+			Ok(v) if v.get("error").and_then(Value::as_str) == Some(ipc::SUCCESS) => {
+				Ok(Some(format!("volume = {}", v.get("data").unwrap_or(&Value::Null))))
+			}
+			Ok(v) => Err(format!(
+				"vol: {}",
+				v.get("error").and_then(Value::as_str).unwrap_or("unknown error")
+			)),
+			Err(e) => Err(format!("vol: {e}")),
+		};
+	};
+	let relative = x.starts_with('+') || x.starts_with('-');
+	match x.parse::<f64>() {
+		Ok(n) if relative => checked("vol", ipc::command(&ctx.sock, &json!(["add", "volume", n]))),
+		Ok(n) => checked("vol", ipc::command(&ctx.sock, &json!(["set_property", "volume", n]))),
+		Err(_) => Err(if relative {
+			"vol: invalid amount".to_owned()
+		} else {
+			"vol: invalid volume".to_owned()
+		}),
+	}
+}
+
 /// Check a one-shot command response, mapping transport and mpv errors to
 /// a message.
 fn checked(desc: &str, resp: io::Result<Value>) -> CmdResult {
@@ -668,6 +718,7 @@ fn run_command(line: &str, app: &mut App, ctx: &Ctx, observer: &mut Option<Obser
 					ipc::command(&ctx.sock, &json!(["set_property", "playlist-pos", i])),
 				)
 			}),
+		"vol" => vol_command(rest.first(), ctx),
 		"del" => crate::delete(ctx, &rest)
 			.map_err(|e| format!("del: {e}"))
 			.map(|()| None),
@@ -880,7 +931,7 @@ fn draw_help(f: &mut Frame, area: ratatui::layout::Rect, bindings: &Keybindings,
 		lines.push(Line::from(spans).style(desc_style));
 	}
 	lines.push(Line::from(format!(
-		" {} prompt: seek time jump del move load save prop cmd restart ",
+		" {} prompt: seek time jump del move load save prop cmd vol restart ",
 		key_label(bindings.command)
 	)));
 
@@ -910,6 +961,8 @@ fn help_entries(bindings: &Keybindings) -> Vec<(String, String)> {
 		(b.next, "next track"),
 		(b.seek_back, "seek 5s back"),
 		(b.seek_fwd, "seek 5s forward"),
+		(b.vol_up, "volume up"),
+		(b.vol_down, "volume down"),
 		(b.delete, "delete entry"),
 		(b.move_up, "move entry up"),
 		(b.move_down, "move entry down"),
@@ -969,11 +1022,15 @@ fn status_line(app: &App, theme: &Theme, bindings: &Keybindings) -> Line<'static
 	} else {
 		Span::raw("")
 	};
+	let volume = app
+		.volume
+		.map_or_else(|| Span::raw(""), |v| Span::raw(format!("vol {v:.0} ")));
 	Line::from(vec![
 		Span::raw(format!(" {glyph} {state} ")),
 		visual,
 		Span::raw(format!("{time} ")),
 		Span::raw(format!("{position}/{} ", app.entries.len())),
+		volume,
 		Span::raw(name),
 		Span::raw(format!(" [{help} help] ")),
 	])
