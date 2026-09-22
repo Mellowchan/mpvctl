@@ -57,6 +57,12 @@
    `J`/`K` move the block (reusing the range-move primitive from the CLI
    move task, so single-entry moves gained correct end-of-list behavior),
    and `v`/esc cancel. The anchor is clamped when the playlist changes.
+11. Added a playlists browser to the TUI (`b`): lists the files from the
+   configured playlists directory (title shows the path, `r` reloads),
+   `m` marks/unmarks entries vim-style, and `a`/enter appends the marked
+   (or cursor) playlists to the main playlist via mpv's `loadlist` while
+   `o` overwrites it (first replace, rest appended); the m3u mirror is
+   rewritten from the read-back so it always matches. b/esc closes.
 
 5. Added optional toml config at $XDG_CONFIG_HOME/mpvctl/config.toml: a
    `playlists_dir` key (~ expanded; MPVCTL_PLAYLIST_DIR still overrides), a

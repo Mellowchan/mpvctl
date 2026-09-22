@@ -59,6 +59,7 @@ enum View {
 	#[default]
 	Playlist,
 	Log,
+	Playlists,
 }
 
 struct Message {
@@ -79,6 +80,11 @@ struct App {
 	message: Option<Message>,
 	server_up: bool,
 	list_state: ListState,
+	/// playlists browser state
+	pls_names: Vec<String>,
+	pls_state: ListState,
+	pls_selected: usize,
+	pls_marked: std::collections::BTreeSet<usize>,
 	view: View,
 	/// ring buffer of recent daemon log lines
 	log_lines: Vec<String>,
@@ -229,7 +235,7 @@ fn event_loop(
 
 	loop {
 		app.list_state.select(Some(app.selected));
-		terminal.draw(|f| draw(f, &mut app, bindings, theme))?;
+		terminal.draw(|f| draw(f, &mut app, ctx, bindings, theme))?;
 
 		if event::poll(TICK)?
 			&& let Event::Key(key) = event::read()?
@@ -289,6 +295,9 @@ fn handle_key(
 
 	if app.view == View::Log {
 		return handle_log_key(key, action, app, observer);
+	}
+	if app.view == View::Playlists {
+		return handle_playlists_key(key, action, app, ctx);
 	}
 
 	// while the keymap is open, any of the close keys just closes it
@@ -382,6 +391,7 @@ fn handle_playlist_key(action: Action, app: &mut App, ctx: &Ctx, observer: &mut 
 			}
 		}
 		Action::LogView => open_log(app, observer),
+		Action::Browser => open_playlists(app, ctx),
 		Action::Command => app.mode = Mode::Command(String::new()),
 		Action::Help => app.show_help = true,
 		Action::Quit => return true,
@@ -448,6 +458,120 @@ fn handle_log_key(key: KeyEvent, action: Option<Action>, app: &mut App, observer
 		}
 		_ if matches!(key.code, KeyCode::Esc) => {
 			close_log(app, observer);
+			false
+		}
+		_ => false,
+	}
+}
+
+/// Open the playlists browser and (re)load its listing.
+fn open_playlists(app: &mut App, ctx: &Ctx) {
+	app.view = View::Playlists;
+	reload_playlists(app, ctx);
+}
+
+fn reload_playlists(app: &mut App, ctx: &Ctx) {
+	app.pls_names = playlist::dir_entries(&ctx.playlists_dir).unwrap_or_default();
+	app.pls_selected = 0;
+	app.pls_marked.clear();
+}
+
+/// The indexes to load: the marked entries, or just the cursor.
+fn playlists_to_load(app: &App) -> Vec<usize> {
+	if app.pls_marked.is_empty() {
+		vec![app.pls_selected]
+	} else {
+		app.pls_marked.iter().copied().collect()
+	}
+}
+
+/// Load the chosen playlists into the main playlist: appended, or replacing
+/// everything when `replace` is set. Returns an error message on failure.
+fn load_playlists(app: &mut App, ctx: &Ctx, replace: bool) -> Result<String, String> {
+	let indexes = playlists_to_load(app);
+	let mut names = Vec::new();
+	let mut cmds = Vec::new();
+	for (n, &i) in indexes.iter().enumerate() {
+		let Some(name) = app.pls_names.get(i) else { continue };
+		let path = ctx.playlists_dir.join(name);
+		let mode = if replace && n == 0 { "replace" } else { "append-play" };
+		cmds.push(json!(["loadlist", path.display().to_string(), mode]));
+		names.push(name.clone());
+	}
+	if cmds.is_empty() {
+		return Err("no playlists to load".to_owned());
+	}
+	let count = cmds.len();
+	playlist::run_commands_refresh(&ctx.sock, &cmds, &ctx.playlist_file).map_err(|e| e.to_string())?;
+	app.view = View::Playlist;
+	Ok(if replace {
+		format!("loaded {count} playlist(s) (replaced)")
+	} else {
+		format!("appended {count} playlist(s)")
+	})
+}
+
+/// Key handling for the playlists browser: cursor + marks, a/enter appends,
+/// o overwrites, r reloads, b/esc closes.
+#[allow(clippy::too_many_lines)]
+fn handle_playlists_key(key: KeyEvent, action: Option<Action>, app: &mut App, ctx: &Ctx) -> bool {
+	let len = app.pls_names.len();
+	match action {
+		Some(Action::Quit) => true,
+		Some(Action::Command) => {
+			app.mode = Mode::Command(String::new());
+			false
+		}
+		Some(Action::Browser) | None if matches!(key.code, KeyCode::Esc) => {
+			app.view = View::Playlist;
+			false
+		}
+		Some(Action::Browser) => {
+			app.view = View::Playlist;
+			false
+		}
+		Some(Action::Up) => {
+			app.pls_selected = app.pls_selected.saturating_sub(1);
+			false
+		}
+		Some(Action::Down) if len > 0 => {
+			app.pls_selected = (app.pls_selected + 1).min(len - 1);
+			false
+		}
+		Some(Action::Top) => {
+			app.pls_selected = 0;
+			false
+		}
+		Some(Action::Bottom) if len > 0 => {
+			app.pls_selected = len - 1;
+			false
+		}
+		Some(Action::Mark) if len > 0 => {
+			if !app.pls_marked.insert(app.pls_selected) {
+				app.pls_marked.remove(&app.pls_selected);
+			}
+			false
+		}
+		Some(Action::Refresh) => {
+			reload_playlists(app, ctx);
+			false
+		}
+		Some(Action::Append | Action::Jump) if len > 0 => {
+			match load_playlists(app, ctx, false) {
+				Ok(msg) => {
+					app.message(msg, false);
+				}
+				Err(e) => app.message(e, true),
+			}
+			false
+		}
+		Some(Action::Overwrite) if len > 0 => {
+			match load_playlists(app, ctx, true) {
+				Ok(msg) => {
+					app.message(msg, false);
+				}
+				Err(e) => app.message(e, true),
+			}
 			false
 		}
 		_ => false,
@@ -603,17 +727,17 @@ fn run_command(line: &str, app: &mut App, ctx: &Ctx, observer: &mut Option<Obser
 	false
 }
 
-fn draw(f: &mut Frame, app: &mut App, bindings: &Keybindings, theme: &Theme) {
+fn draw(f: &mut Frame, app: &mut App, ctx: &Ctx, bindings: &Keybindings, theme: &Theme) {
 	let area = f.area();
 	if area.height < 5 || area.width < 8 {
 		return;
 	}
 	let rows = Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).split(area);
 
-	if app.view == View::Log {
-		draw_log(f, rows[0], app, theme);
-	} else {
-		draw_playlist(f, rows[0], app, theme);
+	match app.view {
+		View::Log => draw_log(f, rows[0], app, theme),
+		View::Playlists => draw_playlists(f, rows[0], app, ctx, theme),
+		View::Playlist => draw_playlist(f, rows[0], app, theme),
 	}
 
 	// status bar (or command prompt)
@@ -674,6 +798,29 @@ fn draw_playlist(f: &mut Frame, area: ratatui::layout::Rect, app: &mut App, them
 		)
 		.highlight_style(Style::new().fg(theme.selected_fg).bg(theme.selected_bg));
 	f.render_stateful_widget(list, area, &mut app.list_state);
+}
+
+/// The playlists browser view.
+fn draw_playlists(f: &mut Frame, area: ratatui::layout::Rect, app: &mut App, ctx: &Ctx, theme: &Theme) {
+	let title = format!(" playlists ─ {} ", ctx.playlists_dir.display());
+	let items: Vec<ListItem> = app
+		.pls_names
+		.iter()
+		.enumerate()
+		.map(|(i, name)| {
+			let mark = if app.pls_marked.contains(&i) { "*" } else { " " };
+			ListItem::new(format!("{mark} {name}"))
+		})
+		.collect();
+	let list = List::new(items)
+		.block(
+			Block::bordered()
+				.title(title)
+				.border_style(Style::new().fg(theme.border)),
+		)
+		.highlight_style(Style::new().fg(theme.selected_fg).bg(theme.selected_bg));
+	app.pls_state.select(Some(app.pls_selected));
+	f.render_stateful_widget(list, area, &mut app.pls_state);
 }
 
 /// The daemon log view (follows the tail unless the user scrolled up).
@@ -763,6 +910,7 @@ fn help_entries(bindings: &Keybindings) -> Vec<(String, String)> {
 		(b.clear, "clear playlist"),
 		(b.log, "daemon log view"),
 		(b.visual, "visual selection (d/J/K on range)"),
+		(b.browser, "playlists browser (m mark, a append, o overwrite)"),
 		(b.command, "command prompt"),
 		(b.help, "toggle this keymap"),
 		(b.quit, "quit"),

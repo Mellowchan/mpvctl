@@ -27,6 +27,17 @@ fn filenames_from(data: &Value) -> Vec<String> {
 		.unwrap_or_default()
 }
 
+/// Sorted playlist file names in a playlists directory (regular files only).
+pub fn dir_entries(dir: &Path) -> io::Result<Vec<String>> {
+	let mut names: Vec<String> = fs::read_dir(dir)?
+		.flatten()
+		.filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
+		.filter_map(|e| e.file_name().into_string().ok())
+		.collect();
+	names.sort();
+	Ok(names)
+}
+
 const REFRESH_ID: u64 = 999;
 
 /// Build the `playlist-move` commands that move entries `a..=b` in front of

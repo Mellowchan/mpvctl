@@ -283,13 +283,7 @@ fn list_playlists(ctx: &Ctx) -> Result<(), Box<dyn Error>> {
 	if !ctx.playlists_dir.is_dir() {
 		return Ok(());
 	}
-	let mut names: Vec<String> = fs::read_dir(&ctx.playlists_dir)?
-		.flatten()
-		.filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
-		.filter_map(|e| e.file_name().into_string().ok())
-		.collect();
-	names.sort();
-	for name in &names {
+	for name in playlist::dir_entries(&ctx.playlists_dir)? {
 		println!("{name}");
 	}
 	Ok(())

@@ -99,6 +99,9 @@ Default (vi-like) keys:
   K / J        move the selected entry up / down
   S            shuffle the playlist
   c            clear the playlist
+  b            playlists browser: j/k move, m mark, a/enter append the
+               selected/marked playlists to the main playlist, o overwrite
+               the main playlist with them, r reload, b/esc close
   L            daemon log view (j/k scroll, g/G, L/esc close)
   :            command prompt
   q (or ^C)    quit
@@ -143,6 +146,11 @@ shuffle = "S"
 clear = "c"
 log = "L"        # open/close the daemon log view
 visual = "v"      # visual (multi) selection
+browser = "b"     # playlists browser
+mark = "m"        # mark a playlist in the browser
+append = "a"      # append marked/selected playlist(s)
+overwrite = "o"   # replace the main playlist with them
+refresh = "r"     # reload the browser listing
 command = ":"      # open the command prompt
 help = "?"        # toggle the keymap window
 quit = "q"
