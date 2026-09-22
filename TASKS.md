@@ -2,27 +2,12 @@
 
 # DONE
 
-15. Fixed the empty TUI log view. Root cause: mpv's request_log_messages
-    only delivers messages emitted after the subscription, so with a paused
-    or idle daemon nothing new arrived and the view started empty, while
-    `mpvctl log` dumps the daemon log file that has the full history. The
-    observer now subscribes for the whole TUI session (so the buffer fills
-    even while the view is closed, and survives reconnects), and opening the
-    view seeds an empty buffer with the log file tail (A:/V: playback status
-    lines filtered out), i.e. exactly what `mpvctl log` shows, before the
-    live info-level events take over.
-
-14. Added volume control: CLI `v | vol [x]` (get, absolute set, or `+10`/`-10`
-    relative like seek) and TUI `+`/`-` keys (±5, work in every view) plus a
-    `:vol [x]` command. The `volume` property is now observed, so the status
-    bar shows the live volume.
-13. Styled the TUI keymap popup: dark background with a colored border and
-    bottom close hint, and the listed keys are now highlighted (bold
-    yellow by default) next to dim gray descriptions. New `[colors]`
-    options `help_bg`/`help_fg`/`help_key` control it. Make the help keymap invoked by `?` nicer, e.g. put border around, make it to have dark background and color highlight for the keys listed
-15. Solve a bug: Investigate why mpv daemon log window invoked by `L` key is empty while the `mpvctl log` command shows entries
-
-# DONE
+16. The daemon volume now shows in both status places: the TUI status bar
+    (live via the observed volume property, added with the volume task) and
+    the `mpvctl ls` bottom status line, which gained a `volume: N%` segment
+    (fetched in the same batched round trip; `?` if unavailable). Verified
+    against a live daemon at several volumes and with the CLI regression
+    suite (identical to the shell tool apart from the new segment).
 
 1. Rewrote mpvctl in rust (serde_json for JSON IPC over std unix sockets, libc
    for signals, /proc scan for pid detection) replacing jq/socat/pgrep/tput;
@@ -82,7 +67,6 @@
     symbols, plus trimmed dependency default-features (ratatui without the
     calendar widget/macros, toml parse-only). 1.82 MB -> 0.90 MB (-51%),
     verified with the CLI regression suite and a TUI smoke test.
-
 12. Added optional toml config at $XDG_CONFIG_HOME/mpvctl/config.toml: a
     `playlists_dir` key (~ expanded; MPVCTL_PLAYLIST_DIR still overrides), a
     `[keys]` section rebinding every TUI action (crossterm key names like
@@ -91,3 +75,20 @@
     invalid values warn on stderr and fall back to the vi-like defaults;
     unit tests cover parsing, precedence and tilde expansion, and the pty
     harness verified rebinding, colors and dir resolution end to end.
+13. Styled the TUI keymap popup: dark background with a colored border and
+    bottom close hint, and the listed keys are now highlighted (bold
+    yellow by default) next to dim gray descriptions. New `[colors]`
+    options `help_bg`/`help_fg`/`help_key` control it.
+14. Added volume control: CLI `v | vol [x]` (get, absolute set, or `+10`/`-10`
+    relative like seek) and TUI `+`/`-` keys (±5, work in every view) plus a
+    `:vol [x]` command. The `volume` property is now observed, so the status
+    bar shows the live volume.
+15. Fixed the empty TUI log view. Root cause: mpv's request_log_messages
+    only delivers messages emitted after the subscription, so with a paused
+    or idle daemon nothing new arrived and the view started empty, while
+    `mpvctl log` dumps the daemon log file that has the full history. The
+    observer now subscribes for the whole TUI session (so the buffer fills
+    even while the view is closed, and survives reconnects), and opening the
+    view seeds an empty buffer with the log file tail (A:/V: playback status
+    lines filtered out), i.e. exactly what `mpvctl log` shows, before the
+    live info-level events take over.

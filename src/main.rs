@@ -296,6 +296,7 @@ fn list(ctx: &Ctx) -> Result<(), Box<dyn Error>> {
 		json!({"request_id": 2, "command": ["get_property", "pause"]}),
 		json!({"request_id": 3, "command": ["get_property", "playback-time"]}),
 		json!({"request_id": 4, "command": ["get_property", "duration"]}),
+		json!({"request_id": 5, "command": ["get_property", "volume"]}),
 	];
 	let lines = ipc::Client::connect(&ctx.sock)?.send(&requests)?;
 
@@ -303,6 +304,7 @@ fn list(ctx: &Ctx) -> Result<(), Box<dyn Error>> {
 	let mut paused = None;
 	let mut playback: Option<f64> = None;
 	let mut duration: Option<f64> = None;
+	let mut volume: Option<f64> = None;
 	for line in lines {
 		let Ok(v) = serde_json::from_str::<Value>(&line) else {
 			continue;
@@ -314,6 +316,7 @@ fn list(ctx: &Ctx) -> Result<(), Box<dyn Error>> {
 			Some(2) => paused = v.get("data").and_then(Value::as_bool),
 			Some(3) => playback = v.get("data").and_then(Value::as_f64),
 			Some(4) => duration = v.get("data").and_then(Value::as_f64),
+			Some(5) => volume = v.get("data").and_then(Value::as_f64),
 			_ => {}
 		}
 	}
@@ -339,8 +342,9 @@ fn list(ctx: &Ctx) -> Result<(), Box<dyn Error>> {
 
 	let is_paused = paused.unwrap_or(false) || playlist_entries.is_empty();
 	let (pb, du) = playlist_times(playback, duration);
+	let volume = volume.map_or_else(|| "?".to_owned(), |v| format!("{v:.0}%"));
 	println!(
-		"\nstatus: {}, time: {}:{}:{}/{}:{}:{}, file: {}",
+		"\nstatus: {}, time: {}:{}:{}/{}:{}:{}, volume: {}, file: {}",
 		if is_paused { "paused" } else { "playing" },
 		pb / 3600,
 		pb % 3600 / 60,
@@ -348,6 +352,7 @@ fn list(ctx: &Ctx) -> Result<(), Box<dyn Error>> {
 		du / 3600,
 		du % 3600 / 60,
 		du % 60,
+		volume,
 		current
 	);
 	Ok(())
