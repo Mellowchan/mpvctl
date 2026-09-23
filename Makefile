@@ -1,10 +1,10 @@
 PREFIX ?= /usr
 
 all:
-	@echo RUN \'make install\' to install mpvctl
+	cargo build --release
 
-install:
-	@install -Dm755 mpvctl $(DESTDIR)$(PREFIX)/bin/mpvctl
+install: all
+	@install -Dm755 target/release/mpvctl $(DESTDIR)$(PREFIX)/bin/mpvctl
 
 uninstall:
 	@rm -f $(DESTDIR)$(PREFIX)/bin/mpvctl
