@@ -1,0 +1,2 @@
+1. Extend vim-like navigation with key combination: `5 + shift + g` will jump to line 5.
+2. Add vim-like search feature: `/` will open search buffer in the bottom bar to type keyword, then `return` confirm the typed buffer, close it and jump to item in tracklist that wildcard matches the keyword, and it should be possible to cycle the matches with `n` and `shift + n` in case there are more matches.
