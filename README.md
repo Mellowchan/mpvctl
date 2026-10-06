@@ -105,6 +105,8 @@ Default (vi-like) keys:
   v            visual selection: extend with j/k/g/G, then d (delete),
                J/K (move the whole block) or v/esc (cancel)
   K / J        move the selected entry up / down
+  /            search track names (case-insensitive wildcards * and ?)
+  n / N        next / previous search match (empty / repeats last search)
   S            shuffle the playlist
   c            clear the playlist
   b            playlists browser: j/k move, m mark, a/enter append the
@@ -164,6 +166,9 @@ mark = "m"        # mark a playlist in the browser
 append = "a"      # append marked/selected playlist(s)
 overwrite = "o"   # replace the main playlist with them
 refresh = "r"     # reload the browser listing
+search = "/"      # open the search prompt
+search_next = "n"  # next search match
+search_prev = "N"  # previous search match
 command = ":"      # open the command prompt
 help = "?"        # toggle the keymap window
 quit = "q"

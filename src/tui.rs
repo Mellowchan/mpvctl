@@ -62,6 +62,8 @@ enum Mode {
 		anchor: usize,
 	},
 	Command(String),
+	/// search buffer opened with `/`
+	Search(String),
 }
 
 /// Which list the main area shows.
@@ -107,6 +109,8 @@ struct App {
 	/// lines scrolled up from the tail when not following
 	log_offset: usize,
 	show_help: bool,
+	/// last search keyword (kept so n/N can cycle the matches)
+	search: Option<String>,
 	/// descriptions of commands awaiting a response, by request id
 	waiting: HashMap<u64, String>,
 }
@@ -303,6 +307,9 @@ fn handle_key(
 	if matches!(app.mode, Mode::Command(_)) {
 		return handle_command_key(key, app, ctx, observer);
 	}
+	if matches!(app.mode, Mode::Search(_)) {
+		return handle_search_key(key, app);
+	}
 
 	if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
 		return true;
@@ -381,13 +388,7 @@ fn handle_key(
 }
 
 /// Key handling for the playlist view (normal and visual mode).
-fn handle_playlist_key(
-	action: Action,
-	count: i64,
-	app: &mut App,
-	ctx: &Ctx,
-	observer: &mut Option<Observer>,
-) -> bool {
+fn handle_playlist_key(action: Action, count: i64, app: &mut App, ctx: &Ctx, observer: &mut Option<Observer>) -> bool {
 	let selected = app.selected;
 	let len = app.entries.len();
 	let obs = observer.as_mut();
@@ -400,7 +401,9 @@ fn handle_playlist_key(
 		Action::Top => {
 			// a count with g (like vim's 5gg) jumps to that line
 			if count > 1 {
-				app.selected = usize::try_from(count - 1).unwrap_or(usize::MAX).min(len.saturating_sub(1));
+				app.selected = usize::try_from(count - 1)
+					.unwrap_or(usize::MAX)
+					.min(len.saturating_sub(1));
 			} else {
 				app.selected = 0;
 			}
@@ -408,7 +411,9 @@ fn handle_playlist_key(
 		Action::Bottom => {
 			// a count with G jumps to that line, without it to the end
 			if count > 1 {
-				app.selected = usize::try_from(count - 1).unwrap_or(usize::MAX).min(len.saturating_sub(1));
+				app.selected = usize::try_from(count - 1)
+					.unwrap_or(usize::MAX)
+					.min(len.saturating_sub(1));
 			} else {
 				app.selected = len.saturating_sub(1);
 			}
@@ -474,11 +479,94 @@ fn handle_playlist_key(
 		Action::LogView => open_log(app, ctx),
 		Action::Browser => open_playlists(app, ctx),
 		Action::Command => app.mode = Mode::Command(String::new()),
+		Action::Search => app.mode = Mode::Search(String::new()),
+		Action::SearchNext => run_search(app, count, true),
+		Action::SearchPrev => run_search(app, count, false),
 		Action::Help => app.show_help = true,
 		Action::Quit => return true,
 		_ => {}
 	}
 	false
+}
+
+/// Key handling for the '/' search buffer.
+fn handle_search_key(key: KeyEvent, app: &mut App) -> bool {
+	let Mode::Search(ref mut input) = app.mode else {
+		return false;
+	};
+	match key.code {
+		KeyCode::Esc => app.mode = Mode::Normal,
+		KeyCode::Enter => {
+			let line = std::mem::take(input);
+			app.mode = Mode::Normal;
+			// an empty pattern repeats the last one, like vim
+			if !line.is_empty() {
+				app.search = Some(line);
+			}
+			if app.search.is_some() {
+				run_search(app, 1, true);
+			}
+		}
+		KeyCode::Backspace => {
+			input.pop();
+		}
+		KeyCode::Char(c) => input.push(c),
+		_ => {}
+	}
+	false
+}
+
+/// Case-insensitive wildcard match supporting `*` and `?`.
+fn wild_match(pat: &[char], text: &[char]) -> bool {
+	match (pat.first(), text.first()) {
+		(None, _) => true,
+		(Some('*'), _) => wild_match(&pat[1..], text) || (!text.is_empty() && wild_match(pat, &text[1..])),
+		(Some('?'), Some(_)) => wild_match(&pat[1..], &text[1..]),
+		(Some(p), Some(t)) if p.eq_ignore_ascii_case(t) => wild_match(&pat[1..], &text[1..]),
+		_ => false,
+	}
+}
+
+/// Unanchored wildcard match: the pattern may start anywhere in the text.
+fn search_match(pat: &[char], text: &[char]) -> bool {
+	(0..=text.len()).any(|k| wild_match(pat, &text[k..]))
+}
+
+/// Jump to the next (or previous) entry whose display name matches the
+/// needle, wrapping around the end. Returns false when nothing matches.
+fn jump_match(app: &mut App, needle: &str, forward: bool) -> bool {
+	let len = app.entries.len();
+	if len == 0 {
+		return false;
+	}
+	let pat: Vec<char> = needle.to_lowercase().chars().collect();
+	let step = if forward { 1 } else { len - 1 };
+	for k in 1..=len {
+		let i = (app.selected + k * step) % len;
+		let name: Vec<char> = crate::display_name(&app.entries[i].filename)
+			.to_lowercase()
+			.chars()
+			.collect();
+		if search_match(&pat, &name) {
+			app.selected = i;
+			return true;
+		}
+	}
+	false
+}
+
+/// Run the current search `count` times, reporting misses in the bar.
+fn run_search(app: &mut App, count: i64, forward: bool) {
+	let Some(needle) = app.search.clone() else {
+		return;
+	};
+	let mut found = true;
+	for _ in 0..count.max(1) {
+		found = jump_match(app, &needle, forward);
+	}
+	if !found {
+		app.message(format!("pattern not found: {needle}"), true);
+	}
 }
 
 /// Key handling for the ':' prompt.
@@ -886,6 +974,7 @@ fn draw(f: &mut Frame, app: &mut App, ctx: &Ctx, bindings: &Keybindings, theme: 
 	let bar_style = Style::new().fg(theme.status_fg).bg(theme.status_bg).bold();
 	let bar = match &app.mode {
 		Mode::Command(input) => Line::from(format!(":{input}▌")),
+		Mode::Search(input) => Line::from(format!("/{input}▌")),
 		Mode::Normal | Mode::Visual { .. } => status_line(app, theme, bindings),
 	};
 	f.render_widget(Paragraph::new(bar).style(bar_style), rows[1]);
@@ -1062,6 +1151,9 @@ fn help_entries(bindings: &Keybindings) -> Vec<(String, String)> {
 		(b.clear, "clear playlist"),
 		(b.log, "daemon log view"),
 		(b.visual, "visual selection (d/J/K on range)"),
+		(b.search, "search track names"),
+		(b.search_next, "next search match"),
+		(b.search_prev, "previous search match"),
 		(b.browser, "playlists browser (m mark, a append, o overwrite)"),
 		(b.command, "command prompt"),
 		(b.help, "toggle this keymap"),
@@ -1114,9 +1206,7 @@ fn status_line(app: &App, theme: &Theme, bindings: &Keybindings) -> Line<'static
 	} else {
 		Span::raw("")
 	};
-	let count = app
-		.count
-		.map_or_else(|| Span::raw(""), |c| Span::raw(format!("{c} ")));
+	let count = app.count.map_or_else(|| Span::raw(""), |c| Span::raw(format!("{c} ")));
 	let volume = app
 		.volume
 		.map_or_else(|| Span::raw(""), |v| Span::raw(format!("vol {v:.0}% ")));
@@ -1130,6 +1220,47 @@ fn status_line(app: &App, theme: &Theme, bindings: &Keybindings) -> Line<'static
 		Span::raw(name),
 		Span::raw(format!(" [{help} help] ")),
 	])
+}
+
+#[cfg(test)]
+mod tests {
+	#![allow(clippy::unwrap_used)]
+	use super::{search_match, wild_match};
+
+	fn m(pat: &str, text: &str) -> bool {
+		let p: Vec<char> = pat.chars().collect();
+		let t: Vec<char> = text.chars().collect();
+		wild_match(&p, &t)
+	}
+
+	fn s(pat: &str, text: &str) -> bool {
+		let p: Vec<char> = pat.chars().collect();
+		let t: Vec<char> = text.chars().collect();
+		search_match(&p, &t)
+	}
+
+	#[test]
+	fn wildcards() {
+		assert!(m("", "anything"));
+		assert!(m("track", "track1"));
+		assert!(m("TRACK", "track1"));
+		assert!(!m("track2", "track1"));
+		assert!(m("*1", "track1"));
+		assert!(m("w*3.wav", "w3.wav"));
+		assert!(m("w?.wav", "w3.wav"));
+		assert!(!m("w?.wav", "w33.wav"));
+		assert!(m("w*.wav", "w33.wav"));
+		assert!(m("*", ""));
+	}
+
+	#[test]
+	fn unanchored() {
+		assert!(s("l", "alpha.wav"));
+		assert!(!s("z", "alpha.wav"));
+		assert!(s("L", "ALPhA.wav"));
+		assert!(s("a*w", "alpha.wav"));
+		assert!(!s("w?va", "alpha.wav"));
+	}
 }
 
 fn fmt_secs(time: Option<f64>) -> String {

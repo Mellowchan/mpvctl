@@ -1,3 +1,14 @@
+# Tue Oct  6 23:30:00 2026 +0200
+
+1. The count prefix now also works with g/G: 5G jumps to line 5 (clamped to
+   the list), plain G still jumps to the last entry.
+2. Added vim-like search to the TUI: / opens a search buffer in the bottom
+   bar, return jumps to the next track whose name matches the keyword
+   (case-insensitive, wildcards * and ?), n/N cycle forward/backward through
+   the matches (wrapping around), an empty pattern repeats the last search
+   and esc cancels the buffer. Keys are rebindable (search, search_next,
+   search_prev). Verified in a tmux-run TUI against an isolated mpv daemon.
+
 # Tue Oct  6 23:00:00 2026 +0200
 
 1. Made the bottom status bar and the selected list item text bold by default.
