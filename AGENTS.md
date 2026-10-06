@@ -19,7 +19,9 @@ mpvctl is a simple terminal tool to control over socket long running mpv session
 
 The coding guidelines are the authoritative standard for both writing and reviewing code:
 
+- Main roadmap of features is in TASKS.md
+- If a task in TASKS.md is considered finished then it must be moved to CHANGELOG.md
+- Update README.md after changes that e.g. expand features or change how the user interacts with the program or config
 - every change must be git commited with relevant description
-- TASKS.md has TODO section on the top, and DONE section on the bottom
-- If a task in TASKS.md is considered finished then it must be moved from TODO to DONE
-- Make sure to update README.md after changes that e.g. expand features or change how the user interacts with the program or config
+- each task from TASKS.md must be in separate git commit
+- every change must be tested it's working before commited
