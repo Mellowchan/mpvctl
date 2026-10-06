@@ -837,7 +837,7 @@ fn draw(f: &mut Frame, app: &mut App, ctx: &Ctx, bindings: &Keybindings, theme: 
 	}
 
 	// status bar (or command prompt)
-	let bar_style = Style::new().fg(theme.status_fg).bg(theme.status_bg);
+	let bar_style = Style::new().fg(theme.status_fg).bg(theme.status_bg).bold();
 	let bar = match &app.mode {
 		Mode::Command(input) => Line::from(format!(":{input}▌")),
 		Mode::Normal | Mode::Visual { .. } => status_line(app, theme, bindings),
@@ -892,7 +892,7 @@ fn draw_playlist(f: &mut Frame, area: ratatui::layout::Rect, app: &mut App, them
 				.title(title)
 				.border_style(Style::new().fg(theme.border)),
 		)
-		.highlight_style(Style::new().fg(theme.selected_fg).bg(theme.selected_bg));
+		.highlight_style(Style::new().fg(theme.selected_fg).bg(theme.selected_bg).bold());
 	f.render_stateful_widget(list, area, &mut app.list_state);
 }
 
@@ -914,7 +914,7 @@ fn draw_playlists(f: &mut Frame, area: ratatui::layout::Rect, app: &mut App, ctx
 				.title(title)
 				.border_style(Style::new().fg(theme.border)),
 		)
-		.highlight_style(Style::new().fg(theme.selected_fg).bg(theme.selected_bg));
+		.highlight_style(Style::new().fg(theme.selected_fg).bg(theme.selected_bg).bold());
 	app.pls_state.select(Some(app.pls_selected));
 	f.render_stateful_widget(list, area, &mut app.pls_state);
 }
