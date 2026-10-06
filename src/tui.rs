@@ -397,8 +397,22 @@ fn handle_playlist_key(
 	match action {
 		Action::Up => app.select(-count),
 		Action::Down => app.select(count),
-		Action::Top => app.selected = 0,
-		Action::Bottom => app.selected = len.saturating_sub(1),
+		Action::Top => {
+			// a count with g (like vim's 5gg) jumps to that line
+			if count > 1 {
+				app.selected = usize::try_from(count - 1).unwrap_or(usize::MAX).min(len.saturating_sub(1));
+			} else {
+				app.selected = 0;
+			}
+		}
+		Action::Bottom => {
+			// a count with G jumps to that line, without it to the end
+			if count > 1 {
+				app.selected = usize::try_from(count - 1).unwrap_or(usize::MAX).min(len.saturating_sub(1));
+			} else {
+				app.selected = len.saturating_sub(1);
+			}
+		}
 		Action::Jump if !app.entries.is_empty() => {
 			app.command(obs, &json!(["set_property", "playlist-pos", selected]), "jump");
 		}
