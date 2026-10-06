@@ -98,6 +98,8 @@ struct App {
 	pls_selected: usize,
 	pls_marked: std::collections::BTreeSet<usize>,
 	view: View,
+	/// vi-like count prefix typed before a motion key (e.g. `5` in `5j`)
+	count: Option<u32>,
 	/// ring buffer of recent daemon log lines
 	log_lines: Vec<String>,
 	/// follow the log tail (false once the user scrolled up)
@@ -340,22 +342,52 @@ fn handle_key(
 		if action == Some(Action::Help) || matches!(key.code, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter) {
 			app.show_help = false;
 		}
+		app.count = None;
 		return false;
 	}
 
-	if matches!(key.code, KeyCode::Esc) && app.visual_range().is_some() {
-		app.mode = Mode::Normal;
+	if matches!(key.code, KeyCode::Esc) {
+		if app.count.is_some() {
+			// esc just cancels a pending count
+			app.count = None;
+			return false;
+		}
+		if app.visual_range().is_some() {
+			app.mode = Mode::Normal;
+		}
+		return false;
+	}
+
+	// digits start a vi-like count prefix applied to the next motion key
+	if key.modifiers == KeyModifiers::NONE
+		&& let KeyCode::Char(c) = key.code
+		&& c.is_ascii_digit()
+	{
+		let d = c.to_digit(10).filter(|&d| d > 0).unwrap_or(0);
+		if app.count.is_some() {
+			app.count = app.count.and_then(|n| n.checked_mul(10)).and_then(|n| n.checked_add(d));
+		} else if d > 0 {
+			app.count = Some(d);
+		}
 		return false;
 	}
 
 	let Some(action) = action else {
+		app.count = None;
 		return false;
 	};
-	handle_playlist_key(action, app, ctx, observer)
+	let count = i64::from(app.count.take().unwrap_or(1).max(1));
+	handle_playlist_key(action, count, app, ctx, observer)
 }
 
 /// Key handling for the playlist view (normal and visual mode).
-fn handle_playlist_key(action: Action, app: &mut App, ctx: &Ctx, observer: &mut Option<Observer>) -> bool {
+fn handle_playlist_key(
+	action: Action,
+	count: i64,
+	app: &mut App,
+	ctx: &Ctx,
+	observer: &mut Option<Observer>,
+) -> bool {
 	let selected = app.selected;
 	let len = app.entries.len();
 	let obs = observer.as_mut();
@@ -363,8 +395,8 @@ fn handle_playlist_key(action: Action, app: &mut App, ctx: &Ctx, observer: &mut 
 	// just the cursor
 	let (a, b) = app.visual_range().unwrap_or((selected, selected));
 	match action {
-		Action::Up => app.select(-1),
-		Action::Down => app.select(1),
+		Action::Up => app.select(-count),
+		Action::Down => app.select(count),
 		Action::Top => app.selected = 0,
 		Action::Bottom => app.selected = len.saturating_sub(1),
 		Action::Jump if !app.entries.is_empty() => {
@@ -1068,12 +1100,16 @@ fn status_line(app: &App, theme: &Theme, bindings: &Keybindings) -> Line<'static
 	} else {
 		Span::raw("")
 	};
+	let count = app
+		.count
+		.map_or_else(|| Span::raw(""), |c| Span::raw(format!("{c} ")));
 	let volume = app
 		.volume
 		.map_or_else(|| Span::raw(""), |v| Span::raw(format!("vol {v:.0}% ")));
 	Line::from(vec![
 		Span::raw(format!(" {glyph} {state} ")),
 		visual,
+		count,
 		Span::raw(format!("{time} ")),
 		Span::raw(format!("{position}/{} ", app.entries.len())),
 		volume,

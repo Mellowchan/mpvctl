@@ -92,6 +92,8 @@ Default (vi-like) keys:
 ```
   k / j        select previous / next track
   g / G        select first / last track
+  <count><motion>  vi-like count prefix: 5j selects 5 tracks down,
+               v5j visually selects 5 tracks down, 3k 3 tracks up
   enter        play the selected track
   space        toggle pause
   p / s        play / pause

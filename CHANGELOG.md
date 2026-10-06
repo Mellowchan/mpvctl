@@ -1,3 +1,12 @@
+# Tue Oct  6 23:00:00 2026 +0200
+
+1. Made the bottom status bar and the selected list item text bold by default.
+2. Added a vi-like count prefix to the TUI navigation: digits typed before a
+   motion key repeat it (5j selects 5 tracks down, 3k 3 tracks up, v5j makes
+   a visual selection spanning 5 tracks down); the pending count shows in the
+   status bar and esc cancels it. Verified in a tmux-run TUI against an
+   isolated mpv daemon (count jumps, visual ranges and range deletes).
+
 # Wed Sep 23 01:12:01 2026 +0200
 
 1. Rewrote mpvctl in rust (serde_json for JSON IPC over std unix sockets, libc
